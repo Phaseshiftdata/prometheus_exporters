@@ -48,8 +48,7 @@ jobs:
         continue-on-error: true
       - name: Install leakdetector
         run: |
-          curl -sL "https://github.com/asymmetric-effort/leakdetector/releases/latest/download/leakdetector_linux_amd64" -o /usr/local/bin/leakdetector
-          chmod +x /usr/local/bin/leakdetector
+          curl -sL "https://github.com/asymmetric-effort/leakdetector/releases/latest/download/leakdetector_linux_amd64.tar.gz" | tar xz -C /usr/local/bin/
       - name: Run leakdetector
         run: leakdetector --format sarif --report leakdetector.sarif --redact
       - name: Upload leakdetector SARIF
