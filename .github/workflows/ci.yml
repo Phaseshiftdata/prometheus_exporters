@@ -24,12 +24,14 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────
-  # Lint — Go vet, staticcheck, govulncheck
+  # Lint — Go vet, staticcheck, govulncheck, leakdetector
   # ──────────────────────────────────────────────────────────────────────
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -44,6 +46,24 @@ jobs:
       - name: Govulncheck
         run: govulncheck ./... || echo "::warning::govulncheck found vulnerabilities (may require Go patch release)"
         continue-on-error: true
+      - name: Install leakdetector
+        run: |
+          curl -sL "https://github.com/asymmetric-effort/leakdetector/releases/latest/download/leakdetector_linux_amd64.tar.gz" | tar xz -C /usr/local/bin/
+      - name: Run leakdetector
+        run: |
+          leakdetector --skip-history --format json --report /tmp/ld.json || true
+          if [ -s /tmp/ld.json ] && [ "$(cat /tmp/ld.json)" != "null" ] && [ "$(cat /tmp/ld.json)" != "[]" ]; then
+            echo "::error::leakdetector found potential secrets:"
+            cat /tmp/ld.json
+            exit 1
+          fi
+          leakdetector --skip-history --format sarif --report leakdetector.sarif || true
+      - name: Upload leakdetector SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: leakdetector.sarif
+          category: leakdetector
 
   # ──────────────────────────────────────────────────────────────────────
   # Test — unit, integration, coverage gate
@@ -185,6 +205,5 @@ jobs:
         run: sleep 30
       - name: Run post-deployment verification tests
         run: cd site && npx playwright test --config=playwright.pdv.config.ts
-        continue-on-error: true
         env:
           SITE_URL: https://prometheus_exporters.phaseshiftdata.com
