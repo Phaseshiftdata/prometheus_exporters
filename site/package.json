@@ -13,7 +13,7 @@
     "@asymmetric-effort/specifyjs": "latest"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
+    "typescript": "^7.0.2",
     "vite": "^6.4.0",
     "@playwright/test": "^1.59.0"
   }
