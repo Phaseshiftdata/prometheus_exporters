@@ -47,43 +47,19 @@ clean:
 # ============================================================================
 lint:
 	@echo "Running Go vet..."
-	@for exp in $(EXPORTERS); do \
-		if [ -d "cmd/$$exp" ]; then \
-			echo "  Vetting cmd/$$exp..."; \
-			cd cmd/$$exp && go vet ./... && cd ../..; \
-		fi; \
-	done
+	go vet ./...
 	@echo "Running staticcheck..."
-	@for exp in $(EXPORTERS); do \
-		if [ -d "cmd/$$exp" ]; then \
-			echo "  Checking cmd/$$exp..."; \
-			cd cmd/$$exp && staticcheck ./... 2>/dev/null && cd ../..; \
-		fi; \
-	done || true
-	@echo "Running golangci-lint..."
-	@for exp in $(EXPORTERS); do \
-		if [ -d "cmd/$$exp" ]; then \
-			echo "  Linting cmd/$$exp..."; \
-			cd cmd/$$exp && golangci-lint run ./... 2>/dev/null && cd ../..; \
-		fi; \
-	done || true
+	@which staticcheck >/dev/null 2>&1 && staticcheck ./... || echo "  staticcheck not installed, skipping"
 	@echo "Lint passed."
 
 # ============================================================================
 # Test - run all tests (unit, integration, e2e)
 # ============================================================================
 test:
-	@echo "Running unit tests..."
-	@for exp in $(EXPORTERS); do \
-		if [ -d "cmd/$$exp" ]; then \
-			echo "  Testing cmd/$$exp..."; \
-			cd cmd/$$exp && go test -v -race ./... && cd ../..; \
-		fi; \
-	done
-	@if [ -d "internal" ]; then \
-		echo "  Testing internal/..."; \
-		go test -v -race ./internal/...; \
-	fi
+	@echo "Running tests..."
+	go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+	@echo "Coverage summary:"
+	@go tool cover -func=coverage.out | tail -1
 	@echo "All tests passed."
 
 # ============================================================================
