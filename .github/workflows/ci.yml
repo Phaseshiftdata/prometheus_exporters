@@ -51,10 +51,10 @@ jobs:
           curl -sL "https://github.com/asymmetric-effort/leakdetector/releases/latest/download/leakdetector_linux_amd64.tar.gz" | tar xz -C /usr/local/bin/
       - name: Run leakdetector
         run: |
-          leakdetector --skip-history --format json --report /tmp/ld.json || true
-          if [ -s /tmp/ld.json ] && [ "$(cat /tmp/ld.json)" != "null" ] && [ "$(cat /tmp/ld.json)" != "[]" ]; then
+          leakdetector --skip-history --format json --report ld-findings.json || true
+          if [ -s ld-findings.json ] && [ "$(cat ld-findings.json)" != "null" ] && [ "$(cat ld-findings.json)" != "[]" ]; then
             echo "::error::leakdetector found potential secrets:"
-            cat /tmp/ld.json
+            cat ld-findings.json
             exit 1
           fi
           leakdetector --skip-history --format sarif --report leakdetector.sarif || true
