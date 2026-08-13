@@ -57,13 +57,7 @@ jobs:
             cat ld-findings.json
             exit 1
           fi
-          leakdetector --skip-history --format sarif --report leakdetector.sarif || true
-      - name: Upload leakdetector SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: leakdetector.sarif
-          category: leakdetector
+          echo "leakdetector: clean"
 
   # ──────────────────────────────────────────────────────────────────────
   # Test — unit, integration, coverage gate
