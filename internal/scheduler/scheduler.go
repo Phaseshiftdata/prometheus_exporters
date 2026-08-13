@@ -8,8 +8,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/collector"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/governor"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/collector"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/governor"
 )
 
 // Scheduler runs collectors on independent tickers.

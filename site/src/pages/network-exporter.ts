@@ -3,8 +3,8 @@ export function NetworkExporterPage(): string {
     <div class="section">
       <h2>Network Exporter</h2>
       <p>Monitors network connectivity and performance, exposing metrics for Prometheus scraping.</p>
-      <pre><code>docker pull ghcr.io/asymmetric-effort/network_exporter:main
-docker run -p 9101:9101 ghcr.io/asymmetric-effort/network_exporter:main</code></pre>
+      <pre><code>docker pull ghcr.io/phaseshiftdata/network_exporter:main
+docker run -p 9101:9101 ghcr.io/phaseshiftdata/network_exporter:main</code></pre>
     </div>
     <div class="section">
       <h2>Configuration</h2>

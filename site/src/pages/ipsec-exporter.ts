@@ -3,8 +3,8 @@ export function IpsecExporterPage(): string {
     <div class="section">
       <h2>IPsec Exporter</h2>
       <p>Monitors IPsec tunnel status and traffic, exposing metrics for Prometheus scraping.</p>
-      <pre><code>docker pull ghcr.io/asymmetric-effort/ipsec_exporter:main
-docker run -p 9102:9102 ghcr.io/asymmetric-effort/ipsec_exporter:main</code></pre>
+      <pre><code>docker pull ghcr.io/phaseshiftdata/ipsec_exporter:main
+docker run -p 9102:9102 ghcr.io/phaseshiftdata/ipsec_exporter:main</code></pre>
     </div>
     <div class="section">
       <h2>Configuration</h2>

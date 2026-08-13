@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/governor"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/governor"
 )
 
 // TestAllCollectors_InterfaceMethods exercises Priority(), Interval(),

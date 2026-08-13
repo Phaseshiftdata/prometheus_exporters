@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/store"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/store"
 )
 
 // TestDNSFirewallCollector_Collect_MultipleAccounts covers multiple-account

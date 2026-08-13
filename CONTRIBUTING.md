@@ -7,13 +7,13 @@ provides guidelines and information for contributors.
 
 This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
 By participating, you are expected to uphold this code. Please report
-unacceptable behavior to <security@asymmetric-effort.com>.
+unacceptable behavior to <security@phaseshiftdata.com>.
 
 ## How to Contribute
 
 ### Reporting Bugs
 
-- Use the [GitHub Issues](https://github.com/asymmetric-effort/prometheus_exporters/issues) tracker
+- Use the [GitHub Issues](https://github.com/phaseshiftdata/prometheus_exporters/issues) tracker
 - Search existing issues before creating a new one
 - Include steps to reproduce, expected behavior, and actual behavior
 - Include your environment details (OS, Go version, container runtime)
@@ -54,7 +54,7 @@ unacceptable behavior to <security@asymmetric-effort.com>.
 ### Getting Started
 
 ```bash
-git clone https://github.com/asymmetric-effort/prometheus_exporters.git
+git clone https://github.com/phaseshiftdata/prometheus_exporters.git
 cd prometheus_exporters
 make lint
 make test

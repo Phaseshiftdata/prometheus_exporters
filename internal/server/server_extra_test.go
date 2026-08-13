@@ -9,7 +9,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/discovery"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/discovery"
 )
 
 func TestServer_StartAndShutdown(t *testing.T) {

@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://prometheus_exporters.asymmetric-effort.com/sitemap.xml
+Sitemap: https://prometheus_exporters.phaseshiftdata.com/sitemap.xml

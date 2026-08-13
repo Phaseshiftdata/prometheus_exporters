@@ -20,7 +20,7 @@ concurrency:
 env:
   GO_VERSION: "1.26"
   NODE_VERSION: "20"
-  REGISTRY: ghcr.io/asymmetric-effort
+  REGISTRY: ghcr.io/phaseshiftdata
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────
@@ -185,4 +185,4 @@ jobs:
       - name: Run post-deployment verification tests
         run: cd site && npx playwright test --config=playwright.pdv.config.ts
         env:
-          SITE_URL: https://prometheus_exporters.asymmetric-effort.com
+          SITE_URL: https://prometheus_exporters.phaseshiftdata.com

@@ -16,7 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/discovery"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/discovery"
 )
 
 // Config holds server configuration.

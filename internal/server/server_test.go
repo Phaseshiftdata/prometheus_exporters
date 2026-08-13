@@ -11,7 +11,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/discovery"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/discovery"
 )
 
 func newTestServer(t *testing.T, cfg Config) *Server {

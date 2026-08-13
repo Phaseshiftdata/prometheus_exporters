@@ -50,7 +50,7 @@ cycle.
 Container images are published to GitHub Container Registry:
 
 ```
-ghcr.io/asymmetric-effort/cloudflare_exporter
+ghcr.io/phaseshiftdata/cloudflare_exporter
 ```
 
 ### Docker
@@ -60,7 +60,7 @@ docker run -d \
   --name cloudflare_exporter \
   -p 9199:9199 \
   -e CF_API_TOKEN="your-cloudflare-api-token" \
-  ghcr.io/asymmetric-effort/cloudflare_exporter:main
+  ghcr.io/phaseshiftdata/cloudflare_exporter:main
 ```
 
 ### Docker Compose
@@ -68,7 +68,7 @@ docker run -d \
 ```yaml
 services:
   cloudflare_exporter:
-    image: ghcr.io/asymmetric-effort/cloudflare_exporter:main
+    image: ghcr.io/phaseshiftdata/cloudflare_exporter:main
     ports:
       - "9199:9199"
     environment:
@@ -190,7 +190,7 @@ Only collectors whose prerequisites are met are activated.
 ```bash
 docker run --rm \
   -e CF_API_TOKEN="your-token" \
-  ghcr.io/asymmetric-effort/cloudflare_exporter:main \
+  ghcr.io/phaseshiftdata/cloudflare_exporter:main \
   --capabilities
 ```
 
@@ -307,7 +307,7 @@ spec:
     spec:
       containers:
         - name: cloudflare-exporter
-          image: ghcr.io/asymmetric-effort/cloudflare_exporter:main
+          image: ghcr.io/phaseshiftdata/cloudflare_exporter:main
           ports:
             - containerPort: 9199
           env:

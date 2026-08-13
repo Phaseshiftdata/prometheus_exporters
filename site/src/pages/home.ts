@@ -30,19 +30,19 @@ export function HomePage(): string {
     <div class="section">
       <h2>Quick Start</h2>
       <pre><code># Pull an exporter image
-docker pull ghcr.io/asymmetric-effort/cloudflare_exporter:main
+docker pull ghcr.io/phaseshiftdata/cloudflare_exporter:main
 
 # Run with an API token
 docker run -d -p 9199:9199 \\
   -e CF_API_TOKEN="your-cloudflare-api-token" \\
-  ghcr.io/asymmetric-effort/cloudflare_exporter:main</code></pre>
+  ghcr.io/phaseshiftdata/cloudflare_exporter:main</code></pre>
     </div>
     <div class="section">
       <h2>Container Images</h2>
       <p>Images are published to GitHub Container Registry (GHCR):</p>
-      <pre><code>ghcr.io/asymmetric-effort/network_exporter
-ghcr.io/asymmetric-effort/ipsec_exporter
-ghcr.io/asymmetric-effort/cloudflare_exporter</code></pre>
+      <pre><code>ghcr.io/phaseshiftdata/network_exporter
+ghcr.io/phaseshiftdata/ipsec_exporter
+ghcr.io/phaseshiftdata/cloudflare_exporter</code></pre>
       <table>
         <thead><tr><th>Trigger</th><th>Tag</th></tr></thead>
         <tbody>
@@ -55,7 +55,7 @@ ghcr.io/asymmetric-effort/cloudflare_exporter</code></pre>
     <div class="section">
       <h2>Development</h2>
       <pre><code># Clone the repository
-git clone https://github.com/asymmetric-effort/prometheus_exporters.git
+git clone https://github.com/phaseshiftdata/prometheus_exporters.git
 cd prometheus_exporters
 
 # Build all exporter images
