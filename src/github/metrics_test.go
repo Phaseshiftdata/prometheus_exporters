@@ -34,14 +34,13 @@ func TestNewMetrics_Registration(t *testing.T) {
 	}
 
 	// Verify metrics are gathered.
-	families, err := reg.Gather()
-	if err != nil {
+	if _, err := reg.Gather(); err != nil {
 		t.Fatalf("failed to gather metrics: %v", err)
 	}
 
 	// At minimum, the gauge (RateLimitRemaining) should be present after set.
 	m.RateLimitRemaining.Set(100)
-	families, err = reg.Gather()
+	families, err := reg.Gather()
 	if err != nil {
 		t.Fatalf("failed to gather metrics: %v", err)
 	}

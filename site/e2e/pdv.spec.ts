@@ -55,9 +55,9 @@ test.describe("post-deployment verification", () => {
 
   test("cloudflare exporter page has metrics catalog", async ({ page }) => {
     await page.goto("/#/cloudflare-exporter");
-    await expect(page.locator(".main")).toContainText("cloudflare_access_login_requests_total");
-    await expect(page.locator(".main")).toContainText("cloudflare_gateway_dns_queries_total");
-    await expect(page.locator(".main")).toContainText("cloudflare_domain_expiration_timestamp_seconds");
+    await expect(page.locator(".main")).toContainText("access_login_requests_total");
+    await expect(page.locator(".main")).toContainText("gateway_dns_queries_total");
+    await expect(page.locator(".main")).toContainText("domain_expiration_timestamp_seconds");
   });
 
   test("cloudflare exporter page has installation instructions", async ({ page }) => {
@@ -194,7 +194,7 @@ test.describe("post-deployment verification", () => {
   test("cloudflare exporter page has self-instrumentation metrics", async ({ page }) => {
     await page.goto("/#/cloudflare-exporter");
     await expect(page.locator(".main")).toContainText("cloudflare_exporter_build_info");
-    await expect(page.locator(".main")).toContainText("cloudflare_exporter_collection_duration_seconds");
+    await expect(page.locator(".main")).toContainText("cloudflare_exporter_scrape_duration_seconds");
   });
 
   test("cloudflare exporter page has collection model section", async ({ page }) => {

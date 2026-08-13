@@ -360,13 +360,6 @@ func (m *statefulConnectionSource) ListConnections() ([]netgraph.Connection, err
 	return m.responses[idx], nil
 }
 
-func (m *statefulConnectionSource) setResponses(responses [][]netgraph.Connection) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.responses = responses
-	m.callCount = 0
-}
-
 // statefulLinkLister returns different link data on each call.
 type statefulLinkLister struct {
 	mu       sync.Mutex

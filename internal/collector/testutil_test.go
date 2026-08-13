@@ -102,34 +102,3 @@ func makeRESTResponse(result interface{}) []byte {
 	return b
 }
 
-// collectPromMetrics collects prometheus metrics from a prometheus.Collector.
-func collectPromMetrics(t *testing.T, c prometheus.Collector) []prometheus.Metric {
-	t.Helper()
-	ch := make(chan prometheus.Metric, 100)
-	go func() {
-		c.Collect(ch)
-		close(ch)
-	}()
-
-	var metrics []prometheus.Metric
-	for m := range ch {
-		metrics = append(metrics, m)
-	}
-	return metrics
-}
-
-// describePromMetrics collects descriptors from a prometheus.Collector.
-func describePromMetrics(t *testing.T, c prometheus.Collector) []*prometheus.Desc {
-	t.Helper()
-	ch := make(chan *prometheus.Desc, 100)
-	go func() {
-		c.Describe(ch)
-		close(ch)
-	}()
-
-	var descs []*prometheus.Desc
-	for d := range ch {
-		descs = append(descs, d)
-	}
-	return descs
-}
