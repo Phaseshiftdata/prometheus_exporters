@@ -1,0 +1,11 @@
+allowlist:
+  paths:
+    - "node_modules/"
+    - "site/node_modules/"
+    - "site/dist/"
+    - "go.sum"
+    - "site/package-lock.json"
+    - ".git/"
+    - "coverage.out"
+
+max-file-size: 1
