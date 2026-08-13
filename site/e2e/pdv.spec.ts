@@ -71,9 +71,9 @@ test.describe("post-deployment verification", () => {
     const footer = page.locator(".footer-inner");
     await expect(footer).toContainText("MIT License");
     await expect(footer).toContainText("Asymmetric Effort");
-    await expect(footer.locator('a[href*="github.com"]')).toBeVisible();
-    await expect(footer.locator('a[href*="SECURITY.md"]')).toBeVisible();
-    await expect(footer.locator('a[href*="CONTRIBUTING.md"]')).toBeVisible();
+    await expect(footer.locator('a[href*="github.com"]').first()).toBeVisible();
+    await expect(footer.locator('a[href*="SECURITY.md"]').first()).toBeVisible();
+    await expect(footer.locator('a[href*="CONTRIBUTING.md"]').first()).toBeVisible();
   });
 
   test("favicon is served", async ({ request }) => {
