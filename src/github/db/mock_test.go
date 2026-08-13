@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // mockCommandTag implements CommandTag for testing.
@@ -42,6 +43,18 @@ func (r *mockRow) Scan(dest ...any) error {
 				}
 			case *string:
 				if v, ok := r.values[i].(string); ok {
+					*ptr = v
+				}
+			case *bool:
+				switch v := r.values[i].(type) {
+				case bool:
+					*ptr = v
+				case int:
+					*ptr = v != 0
+				}
+			case *time.Time:
+				switch v := r.values[i].(type) {
+				case time.Time:
 					*ptr = v
 				}
 			}
@@ -92,6 +105,18 @@ func (r *mockRows) Scan(dest ...any) error {
 				}
 			case *string:
 				if v, ok := row[i].(string); ok {
+					*ptr = v
+				}
+			case *bool:
+				switch v := row[i].(type) {
+				case bool:
+					*ptr = v
+				case int:
+					*ptr = v != 0
+				}
+			case *time.Time:
+				switch v := row[i].(type) {
+				case time.Time:
 					*ptr = v
 				}
 			}

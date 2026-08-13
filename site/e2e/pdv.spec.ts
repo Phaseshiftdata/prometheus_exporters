@@ -152,4 +152,70 @@ test.describe("post-deployment verification", () => {
     const footer = page.locator(".footer-inner");
     await expect(footer).toContainText(/v\d+\.\d+\.\d+/);
   });
+
+  // Network exporter page coverage
+  test("network exporter page renders with content", async ({ page }) => {
+    await page.goto("/#/network-exporter");
+    await expect(page.locator(".main")).toContainText("Network Exporter");
+    await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/network_exporter");
+    await expect(page.locator("pre code")).toBeVisible();
+  });
+
+  // IPsec exporter page coverage
+  test("ipsec exporter page renders with content", async ({ page }) => {
+    await page.goto("/#/ipsec-exporter");
+    await expect(page.locator(".main")).toContainText("IPsec Exporter");
+    await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/ipsec_exporter");
+    await expect(page.locator("pre code")).toBeVisible();
+  });
+
+  // Cloudflare exporter page comprehensive content checks
+  test("cloudflare exporter page has architecture section", async ({ page }) => {
+    await page.goto("/#/cloudflare-exporter");
+    await expect(page.locator(".main")).toContainText("Capability Discovery");
+    await expect(page.locator(".main")).toContainText("Quota Governor");
+    await expect(page.locator(".main")).toContainText("Aggregation Store");
+  });
+
+  test("cloudflare exporter page has API token section", async ({ page }) => {
+    await page.goto("/#/cloudflare-exporter");
+    await expect(page.locator(".main")).toContainText("API Token");
+    await expect(page.locator(".main")).toContainText("Account Analytics");
+    await expect(page.locator(".main")).toContainText("Global API keys are prohibited");
+  });
+
+  test("cloudflare exporter page has endpoints section", async ({ page }) => {
+    await page.goto("/#/cloudflare-exporter");
+    await expect(page.locator(".main")).toContainText("/metrics");
+    await expect(page.locator(".main")).toContainText("/health");
+    await expect(page.locator(".main")).toContainText("/capabilities");
+  });
+
+  test("cloudflare exporter page has self-instrumentation metrics", async ({ page }) => {
+    await page.goto("/#/cloudflare-exporter");
+    await expect(page.locator(".main")).toContainText("cloudflare_exporter_build_info");
+    await expect(page.locator(".main")).toContainText("cloudflare_exporter_collection_duration_seconds");
+  });
+
+  test("cloudflare exporter page has collection model section", async ({ page }) => {
+    await page.goto("/#/cloudflare-exporter");
+    await expect(page.locator(".main")).toContainText("Collection Model");
+    await expect(page.locator(".main")).toContainText("five minutes");
+    await expect(page.locator(".main")).toContainText("deduplication");
+  });
+
+  // Home page comprehensive content checks
+  test("home page has container image registry info", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("body")).toContainText("ghcr.io/phaseshiftdata");
+    await expect(page.locator("body")).toContainText(":main");
+    await expect(page.locator("body")).toContainText("commit-sha");
+  });
+
+  test("home page has all three exporter ports", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("body")).toContainText("9101");
+    await expect(page.locator("body")).toContainText("9102");
+    await expect(page.locator("body")).toContainText("9199");
+  });
 });

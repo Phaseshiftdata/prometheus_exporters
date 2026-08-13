@@ -27,6 +27,14 @@ Thumbs.db
 
 # Coverage
 coverage/
+coverage.out
+*.out
+
+# Compiled binaries
+cloudflare_exporter
+github_exporter
+network_exporter
+ipsec_exporter
 
 # Environment
 .env

@@ -15,6 +15,7 @@ import (
 	"github.com/phaseshiftdata/prometheus_exporters/internal/collector"
 	"github.com/phaseshiftdata/prometheus_exporters/internal/discovery"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
 
@@ -459,5 +460,252 @@ func TestToInternalConfig(t *testing.T) {
 	}
 	if cfg.CapabilitiesOnly != rc.CapabilitiesOnly {
 		t.Errorf("CapabilitiesOnly mismatch: got %v, want %v", cfg.CapabilitiesOnly, rc.CapabilitiesOnly)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// execute tests
+// ---------------------------------------------------------------------------
+
+func TestExecute_Success(t *testing.T) {
+	// execute() calls rootCmd().Execute(). With --version it should succeed
+	// and return 0. We override os.Args to inject --version.
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+	os.Args = []string{"cloudflare_exporter", "--version"}
+
+	code := execute()
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+}
+
+func TestExecute_Error(t *testing.T) {
+	// An invalid flag should cause execute() to return 1.
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+	os.Args = []string{"cloudflare_exporter", "--no-such-flag"}
+
+	code := execute()
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// splitCSV tests
+// ---------------------------------------------------------------------------
+
+func TestSplitCSV_Empty(t *testing.T) {
+	result := splitCSV("")
+	if result != nil {
+		t.Fatalf("expected nil for empty input, got %v", result)
+	}
+}
+
+func TestSplitCSV_SingleValue(t *testing.T) {
+	result := splitCSV("hello")
+	if len(result) != 1 || result[0] != "hello" {
+		t.Fatalf("expected [hello], got %v", result)
+	}
+}
+
+func TestSplitCSV_MultipleValues(t *testing.T) {
+	result := splitCSV("a, b ,c")
+	if len(result) != 3 || result[0] != "a" || result[1] != "b" || result[2] != "c" {
+		t.Fatalf("expected [a b c], got %v", result)
+	}
+}
+
+func TestSplitCSV_OnlyWhitespace(t *testing.T) {
+	// Comma-separated empty/whitespace parts should return nil.
+	result := splitCSV(" , , ")
+	if result != nil {
+		t.Fatalf("expected nil for whitespace-only CSV, got %v", result)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// resolveString / resolveInt tests
+// ---------------------------------------------------------------------------
+
+func TestResolveString_FlagChanged(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"--cf.api-token", "from-flag"})
+	// Parse flags without running RunE.
+	cmd.RunE = func(cmd *cobra.Command, args []string) error { return nil }
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := resolveString(cmd, "cf.api-token", "from-flag", "CF_API_TOKEN", "default-val")
+	if got != "from-flag" {
+		t.Fatalf("expected from-flag, got %q", got)
+	}
+}
+
+func TestResolveString_EnvFallback(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{})
+	cmd.RunE = func(cmd *cobra.Command, args []string) error { return nil }
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("CF_API_TOKEN", "from-env")
+	got := resolveString(cmd, "cf.api-token", "", "CF_API_TOKEN", "default-val")
+	if got != "from-env" {
+		t.Fatalf("expected from-env, got %q", got)
+	}
+}
+
+func TestResolveString_DefaultFallback(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{})
+	cmd.RunE = func(cmd *cobra.Command, args []string) error { return nil }
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := resolveString(cmd, "cf.api-token", "", "CF_API_TOKEN_NONEXISTENT", "default-val")
+	if got != "default-val" {
+		t.Fatalf("expected default-val, got %q", got)
+	}
+}
+
+func TestResolveString_FlagValFallback(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{})
+	cmd.RunE = func(cmd *cobra.Command, args []string) error { return nil }
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := resolveString(cmd, "cf.api-token", "flag-default", "CF_API_TOKEN_NONEXISTENT", "")
+	if got != "flag-default" {
+		t.Fatalf("expected flag-default, got %q", got)
+	}
+}
+
+func TestResolveInt_FlagChanged(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"--cf.scrape-delay", "999"})
+	cmd.RunE = func(cmd *cobra.Command, args []string) error { return nil }
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := resolveInt(cmd, "cf.scrape-delay", 999, "CF_SCRAPE_DELAY_SECONDS", 300)
+	if got != 999 {
+		t.Fatalf("expected 999, got %d", got)
+	}
+}
+
+func TestResolveInt_EnvFallback(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{})
+	cmd.RunE = func(cmd *cobra.Command, args []string) error { return nil }
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("CF_SCRAPE_DELAY_SECONDS", "777")
+	got := resolveInt(cmd, "cf.scrape-delay", 300, "CF_SCRAPE_DELAY_SECONDS", 300)
+	if got != 777 {
+		t.Fatalf("expected 777, got %d", got)
+	}
+}
+
+func TestResolveInt_EnvInvalid(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{})
+	cmd.RunE = func(cmd *cobra.Command, args []string) error { return nil }
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("CF_SCRAPE_DELAY_SECONDS", "not-a-number")
+	got := resolveInt(cmd, "cf.scrape-delay", 300, "CF_SCRAPE_DELAY_SECONDS", 42)
+	if got != 42 {
+		t.Fatalf("expected default 42 when env is invalid, got %d", got)
+	}
+}
+
+func TestResolveInt_DefaultFallback(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{})
+	cmd.RunE = func(cmd *cobra.Command, args []string) error { return nil }
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := resolveInt(cmd, "cf.scrape-delay", 300, "CF_NONEXISTENT_VAR", 42)
+	if got != 42 {
+		t.Fatalf("expected 42, got %d", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// rootCmd RunE closure test (exercises resolveString/resolveInt through cobra)
+// ---------------------------------------------------------------------------
+
+func TestRootCmd_RunE_WithFlags(t *testing.T) {
+	// Execute rootCmd with --capabilities so it runs the RunE closure
+	// (which calls resolveString/resolveInt to build runConfig) and then
+	// run() exits early in capabilities mode.
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token", "tok",
+		"--cf.accounts", "a1,a2",
+		"--cf.zones", "z1",
+		"--cf.zones-exclude", "z2",
+		"--cf.scrape-delay", "60",
+		"--cf.time-window", "30",
+		"--cf.refresh-interval", "15",
+		"--cf.discovery-interval", "100",
+		"--cf.graphql-budget", "50",
+		"--cf.rest-budget", "200",
+		"--cf.collectors-enabled", "access,dns",
+		"--cf.gateway-category-allowlist", "cat1,cat2",
+		"--cf.gateway-category-top-n", "10",
+		"--cf.request-timeout", "3",
+		"--web.listen-address", "127.0.0.1:0",
+		"--web.metrics-path", "/m",
+		"--web.tls-cert-file", "",
+		"--web.tls-key-file", "",
+		"--web.basic-auth-username", "",
+		"--web.basic-auth-password", "",
+		"--log.level", "debug",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("rootCmd with flags should succeed in capabilities mode: %v", err)
+	}
+}
+
+func TestRootCmd_RunE_WithEnvVars(t *testing.T) {
+	// Exercise the env-var fallback paths inside the RunE closure.
+	t.Setenv("CF_API_TOKEN", "env-token")
+	t.Setenv("CF_ACCOUNTS", "ea1")
+	t.Setenv("CF_ZONES", "ez1")
+	t.Setenv("CF_ZONES_EXCLUDE", "ez2")
+	t.Setenv("CF_SCRAPE_DELAY_SECONDS", "120")
+	t.Setenv("CF_TIME_WINDOW_SECONDS", "45")
+	t.Setenv("CF_REFRESH_INTERVAL_SECONDS", "20")
+	t.Setenv("CF_DISCOVERY_INTERVAL_SECONDS", "500")
+	t.Setenv("CF_GRAPHQL_BUDGET_PER_WINDOW", "80")
+	t.Setenv("CF_REST_BUDGET_PER_WINDOW", "400")
+	t.Setenv("CF_COLLECTORS_ENABLED", "dns")
+	t.Setenv("CF_GATEWAY_CATEGORY_ALLOWLIST", "cat1")
+	t.Setenv("CF_GATEWAY_CATEGORY_TOP_N", "5")
+	t.Setenv("CF_REQUEST_TIMEOUT_SECONDS", "7")
+	t.Setenv("LISTEN_ADDRESS", "127.0.0.1:0")
+	t.Setenv("METRICS_PATH", "/prom")
+	t.Setenv("LOG_LEVEL", "warn")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"--capabilities"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("rootCmd with env vars should succeed in capabilities mode: %v", err)
 	}
 }
