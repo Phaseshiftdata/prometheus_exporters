@@ -1,4 +1,4 @@
-.PHONY: all setup clean lint test build deploy version version/major version/minor version/patch help
+.PHONY: all setup clean lint test cover build deploy version version/major version/minor version/patch help
 
 PROJECT_NAME := prometheus_exporters
 VERSION_FILE := VERSION
@@ -61,6 +61,23 @@ test:
 	@echo "Coverage summary:"
 	@go tool cover -func=coverage.out | tail -1
 	@echo "All tests passed."
+
+# ============================================================================
+# Cover - run test coverage and gate on 98% threshold
+# ============================================================================
+COVERAGE_THRESHOLD := 98.0
+
+cover:
+	@echo "Running test coverage..."
+	@go test -coverprofile=coverage.out -covermode=atomic ./...
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $$3}' | sed 's/%//'); \
+	echo "Total coverage: $${COVERAGE}%"; \
+	if [ $$(echo "$${COVERAGE} < $(COVERAGE_THRESHOLD)" | bc -l) -eq 1 ]; then \
+		echo "FAIL: coverage $${COVERAGE}% is below $(COVERAGE_THRESHOLD)% threshold"; \
+		exit 1; \
+	else \
+		echo "PASS: coverage $${COVERAGE}% meets $(COVERAGE_THRESHOLD)% threshold"; \
+	fi
 
 # ============================================================================
 # Build - build container images
@@ -167,6 +184,7 @@ help:
 	@echo "  test             Run all tests (unit, integration, e2e)"
 	@echo "  build            Build container images tagged with policy"
 	@echo "  deploy           Push container images to GHCR"
+	@echo "  cover            Run test coverage and gate on 98%% threshold"
 	@echo "  version          Tag v0.0.0 if no semver tags exist, else bump patch"
 	@echo "  version/major    Bump major version and tag"
 	@echo "  version/minor    Bump minor version and tag"

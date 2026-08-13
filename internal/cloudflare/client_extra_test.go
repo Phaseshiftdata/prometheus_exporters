@@ -74,6 +74,34 @@ func TestSetHTTPClient_CustomTimeout(t *testing.T) {
 	}
 }
 
+func TestQueryGraphQL_MarshalError(t *testing.T) {
+	c := NewClient("token", 5*time.Second)
+
+	// Passing a channel in the variables map causes json.Marshal to fail.
+	vars := map[string]any{"bad": make(chan int)}
+	_, _, err := c.QueryGraphQL(context.Background(), "{}", vars)
+	if err == nil {
+		t.Fatal("expected error for unmarshalable variables")
+	}
+	if !strings.Contains(err.Error(), "marshaling GraphQL request") {
+		t.Fatalf("expected marshaling error, got: %v", err)
+	}
+}
+
+func TestRESTGet_InvalidPath(t *testing.T) {
+	c := NewClient("token", 5*time.Second)
+
+	// A path containing a DEL control character (0x7f) causes
+	// http.NewRequestWithContext to fail during URL parsing.
+	_, _, err := c.RESTGet(context.Background(), "/\x7f")
+	if err == nil {
+		t.Fatal("expected error for invalid path")
+	}
+	if !strings.Contains(err.Error(), "creating REST request") {
+		t.Fatalf("expected creating request error, got: %v", err)
+	}
+}
+
 func TestValidateDimensions_Mixed(t *testing.T) {
 	// Mix of valid and invalid
 	err := ValidateDimensions([]string{"queryType", "userEmail", "responseCode"})
