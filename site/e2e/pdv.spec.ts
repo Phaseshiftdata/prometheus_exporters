@@ -181,7 +181,7 @@ test.describe("post-deployment verification", () => {
     await page.goto("/#/cloudflare-exporter");
     await expect(page.locator(".main")).toContainText("API Token");
     await expect(page.locator(".main")).toContainText("Account Analytics");
-    await expect(page.locator(".main")).toContainText("Global API keys are prohibited");
+    await expect(page.locator(".main")).toContainText("not a Global API Key");
   });
 
   test("cloudflare exporter page has endpoints section", async ({ page }) => {
@@ -201,7 +201,7 @@ test.describe("post-deployment verification", () => {
     await page.goto("/#/cloudflare-exporter");
     await expect(page.locator(".main")).toContainText("Collection Model");
     await expect(page.locator(".main")).toContainText("five minutes");
-    await expect(page.locator(".main")).toContainText("deduplication");
+    await expect(page.locator(".main")).toContainText("double-counting");
   });
 
   // Home page comprehensive content checks
