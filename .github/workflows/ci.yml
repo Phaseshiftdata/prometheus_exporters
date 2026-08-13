@@ -19,7 +19,7 @@ concurrency:
 
 env:
   GO_VERSION: "1.26"
-  NODE_VERSION: "20"
+  NODE_VERSION: "24"
   REGISTRY: ghcr.io/phaseshiftdata
 
 jobs:
