@@ -1,0 +1,33 @@
+# Build artifacts
+build/
+bin/
+dist/
+*.tar.gz
+
+# Go
+vendor/
+
+# Node / Site
+node_modules/
+site/node_modules/
+site/dist/
+playwright-report/
+test-results/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+
+# Environment
+.env
+.env.local
