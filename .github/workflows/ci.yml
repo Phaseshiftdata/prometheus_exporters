@@ -50,9 +50,7 @@ jobs:
         run: |
           curl -sL "https://github.com/asymmetric-effort/leakdetector/releases/latest/download/leakdetector_linux_amd64.tar.gz" | tar xz -C /usr/local/bin/
       - name: Run leakdetector
-        run: |
-          leakdetector --skip-history --verbose 2>&1 || true
-          leakdetector --skip-history --format sarif --report leakdetector.sarif || true
+        run: leakdetector --skip-history --format sarif --report leakdetector.sarif
       - name: Upload leakdetector SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v4
