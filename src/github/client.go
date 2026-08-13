@@ -19,8 +19,6 @@ import (
 type Client struct {
 	httpClient *http.Client
 	auth       *Auth
-	baseURL    string // override for testing; empty means use URLs as-is
-
 	etagMu sync.RWMutex
 	etags  map[string]string
 

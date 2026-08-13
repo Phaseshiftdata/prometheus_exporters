@@ -397,8 +397,8 @@ func (d *Discovery) stage2SchemaIntrospection(ctx context.Context, matrix *Capab
 	return surviving
 }
 
-func buildIntrospectionQuery(scope string) string {
-	return fmt.Sprintf(`{
+func buildIntrospectionQuery(_ string) string {
+	return `{
 		__type(name: "viewer") {
 			fields {
 				name
@@ -414,7 +414,7 @@ func buildIntrospectionQuery(scope string) string {
 				}
 			}
 		}
-	}`)
+	}`
 }
 
 func (d *Discovery) introspectScope(ctx context.Context, query string) map[string]bool {
