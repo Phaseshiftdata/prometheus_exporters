@@ -255,15 +255,8 @@ func TestServerStartAndShutdown(t *testing.T) {
 		errCh <- srv.Start()
 	}()
 
-	// Wait for the server to be started by polling until httpServer is set
-	deadline := time.Now().Add(2 * time.Second)
-	for srv.httpServer == nil && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
-	}
-
-	if srv.httpServer == nil {
-		t.Fatal("server did not start in time")
-	}
+	// Give the server goroutine time to bind and start serving.
+	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

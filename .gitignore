@@ -30,11 +30,11 @@ coverage/
 coverage.out
 *.out
 
-# Compiled binaries
-cloudflare_exporter
-github_exporter
-network_exporter
-ipsec_exporter
+# Compiled binaries (root level only)
+/cloudflare_exporter
+/github_exporter
+/network_exporter
+/ipsec_exporter
 
 # Environment
 .env

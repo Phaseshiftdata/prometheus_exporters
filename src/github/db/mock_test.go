@@ -71,10 +71,7 @@ type mockRows struct {
 }
 
 func (r *mockRows) Next() bool {
-	if r.cursor < len(r.data) {
-		return true
-	}
-	return false
+	return r.cursor < len(r.data)
 }
 
 func (r *mockRows) Scan(dest ...any) error {

@@ -10,7 +10,7 @@
     "test": "npx playwright test"
   },
   "dependencies": {
-    "@phaseshiftdata/specifyjs": "latest"
+    "@asymmetric-effort/specifyjs": "latest"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
