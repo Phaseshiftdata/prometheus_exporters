@@ -194,7 +194,7 @@ test.describe("post-deployment verification", () => {
   test("cloudflare exporter page has self-instrumentation metrics", async ({ page }) => {
     await page.goto("/#/cloudflare-exporter");
     await expect(page.locator(".main")).toContainText("cloudflare_exporter_build_info");
-    await expect(page.locator(".main")).toContainText("cloudflare_exporter_collection_duration_seconds");
+    await expect(page.locator(".main")).toContainText("cloudflare_exporter_scrape_duration_seconds");
   });
 
   test("cloudflare exporter page has collection model section", async ({ page }) => {
