@@ -196,7 +196,9 @@ jobs:
       - name: Install Playwright
         run: cd site && npm install && npx playwright install --with-deps chromium
       - name: Wait for deployment propagation
-        run: sleep 30
+        run: |
+          echo "Waiting 90s for CDN cache propagation..."
+          sleep 90
       - name: Run post-deployment verification tests
         run: cd site && npx playwright test --config=playwright.pdv.config.ts
         env:
