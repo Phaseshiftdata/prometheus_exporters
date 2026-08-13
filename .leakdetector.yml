@@ -7,3 +7,16 @@ exclude_paths:
   - ".git/"
   - "coverage.out"
   - "*.out"
+
+allowlists:
+  - description: "Test database connection strings with dummy credentials"
+    paths:
+      - "*_test.go"
+    rules:
+      - "postgresql-connection-string"
+  - description: "Example API tokens in documentation and site pages"
+    paths:
+      - "docs/"
+      - "site/src/pages/"
+    rules:
+      - "generic-api-key"
