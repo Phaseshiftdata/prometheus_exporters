@@ -1,4 +1,4 @@
-.PHONY: all setup clean lint test build deploy help
+.PHONY: all setup clean lint test build deploy version version/major version/minor version/patch help
 
 PROJECT_NAME := prometheus_exporters
 VERSION_FILE := VERSION
@@ -122,6 +122,62 @@ deploy:
 	@echo "Deploy complete."
 
 # ============================================================================
+# Version - semantic version tagging
+# ============================================================================
+LATEST_TAG := $(shell git tag -l 'v*' --sort=-version:refname | head -1)
+
+version:
+ifeq ($(LATEST_TAG),)
+	@echo "No semver tags found. Tagging v0.0.0..."
+	@git tag -a v0.0.0 -m "v0.0.0"
+	@echo "Tagged v0.0.0"
+else
+	@$(MAKE) --no-print-directory version/patch
+endif
+
+version/patch:
+ifeq ($(LATEST_TAG),)
+	@echo "Error: no existing semver tag found. Run 'make version' first." >&2; exit 1
+else
+	@CURRENT="$(LATEST_TAG)"; \
+	CURRENT=$${CURRENT#v}; \
+	IFS='.' read -r MAJOR MINOR PATCH <<< "$$CURRENT"; \
+	PATCH=$$((PATCH + 1)); \
+	NEW="v$$MAJOR.$$MINOR.$$PATCH"; \
+	git tag -a "$$NEW" -m "$$NEW"; \
+	echo "Tagged $$NEW (was $(LATEST_TAG))"
+endif
+
+version/minor:
+ifeq ($(LATEST_TAG),)
+	@echo "Error: no existing semver tag found. Run 'make version' first." >&2; exit 1
+else
+	@CURRENT="$(LATEST_TAG)"; \
+	CURRENT=$${CURRENT#v}; \
+	IFS='.' read -r MAJOR MINOR PATCH <<< "$$CURRENT"; \
+	MINOR=$$((MINOR + 1)); \
+	PATCH=0; \
+	NEW="v$$MAJOR.$$MINOR.$$PATCH"; \
+	git tag -a "$$NEW" -m "$$NEW"; \
+	echo "Tagged $$NEW (was $(LATEST_TAG))"
+endif
+
+version/major:
+ifeq ($(LATEST_TAG),)
+	@echo "Error: no existing semver tag found. Run 'make version' first." >&2; exit 1
+else
+	@CURRENT="$(LATEST_TAG)"; \
+	CURRENT=$${CURRENT#v}; \
+	IFS='.' read -r MAJOR MINOR PATCH <<< "$$CURRENT"; \
+	MAJOR=$$((MAJOR + 1)); \
+	MINOR=0; \
+	PATCH=0; \
+	NEW="v$$MAJOR.$$MINOR.$$PATCH"; \
+	git tag -a "$$NEW" -m "$$NEW"; \
+	echo "Tagged $$NEW (was $(LATEST_TAG))"
+endif
+
+# ============================================================================
 # Help
 # ============================================================================
 help:
@@ -135,6 +191,10 @@ help:
 	@echo "  test             Run all tests (unit, integration, e2e)"
 	@echo "  build            Build container images tagged with policy"
 	@echo "  deploy           Push container images to GHCR"
+	@echo "  version          Tag v0.0.0 if no semver tags exist, else bump patch"
+	@echo "  version/major    Bump major version and tag"
+	@echo "  version/minor    Bump minor version and tag"
+	@echo "  version/patch    Bump patch version and tag"
 	@echo "  help             Show this help"
 	@echo ""
 	@echo "Image Tag Policy:"
