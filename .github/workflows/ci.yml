@@ -140,7 +140,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install site dependencies
-        run: cd site && npm ci
+        run: cd site && npm install
       - name: Build site
         run: cd site && npx vite build
       - name: Install Playwright
@@ -179,7 +179,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install Playwright
-        run: cd site && npm ci && npx playwright install --with-deps chromium
+        run: cd site && npm install && npx playwright install --with-deps chromium
       - name: Wait for deployment propagation
         run: sleep 30
       - name: Run post-deployment verification tests
