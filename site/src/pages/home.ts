@@ -2,7 +2,7 @@ export function HomePage(): string {
   const exporters = [
     ["network_exporter", "Network connectivity and performance metrics", "9101"],
     ["ipsec_exporter", "IPsec tunnel status and traffic metrics", "9102"],
-    ["cloudflare_exporter", "Cloudflare zone and DNS analytics metrics", "9103"],
+    ["cloudflare_exporter", "Cloudflare analytics, Zero Trust, DNS, and certificate metrics", "9199"],
   ];
 
   const exporterRows = exporters
@@ -30,13 +30,19 @@ export function HomePage(): string {
     <div class="section">
       <h2>Quick Start</h2>
       <pre><code># Pull an exporter image
-docker pull ghcr.io/asymmetric-effort/network_exporter:main
+docker pull ghcr.io/asymmetric-effort/cloudflare_exporter:main
 
-# Run with default configuration
-docker run -p 9101:9101 ghcr.io/asymmetric-effort/network_exporter:main</code></pre>
+# Run with an API token
+docker run -d -p 9199:9199 \\
+  -e CF_API_TOKEN="your-cloudflare-api-token" \\
+  ghcr.io/asymmetric-effort/cloudflare_exporter:main</code></pre>
     </div>
     <div class="section">
-      <h2>Container Image Tags</h2>
+      <h2>Container Images</h2>
+      <p>Images are published to GitHub Container Registry (GHCR):</p>
+      <pre><code>ghcr.io/asymmetric-effort/network_exporter
+ghcr.io/asymmetric-effort/ipsec_exporter
+ghcr.io/asymmetric-effort/cloudflare_exporter</code></pre>
       <table>
         <thead><tr><th>Trigger</th><th>Tag</th></tr></thead>
         <tbody>
