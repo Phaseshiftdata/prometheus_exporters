@@ -5,7 +5,7 @@ VERSION_FILE := VERSION
 VERSION := $(shell cat $(VERSION_FILE))
 
 EXPORTERS := network_exporter ipsec_exporter cloudflare_exporter
-REGISTRY := ghcr.io/asymmetric-effort
+REGISTRY := ghcr.io/phaseshiftdata
 
 COMMIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")

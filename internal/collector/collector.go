@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/governor"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/governor"
 )
 
 // Priority classes for collection scheduling and budget shedding.

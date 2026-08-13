@@ -46,11 +46,11 @@ function renderFooter(): string {
       <span>v${VERSION}</span>
       <span>MIT License \u00A9 2026 Asymmetric Effort, LLC</span>
       <span>
-        <a href="https://github.com/asymmetric-effort/prometheus_exporters" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/phaseshiftdata/prometheus_exporters" target="_blank" rel="noopener noreferrer">GitHub</a>
         \u00B7
-        <a href="https://github.com/asymmetric-effort/prometheus_exporters/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security</a>
+        <a href="https://github.com/phaseshiftdata/prometheus_exporters/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security</a>
         \u00B7
-        <a href="https://github.com/asymmetric-effort/prometheus_exporters/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">Contributing</a>
+        <a href="https://github.com/phaseshiftdata/prometheus_exporters/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">Contributing</a>
       </span>
     </div>
   </footer>`;
@@ -85,7 +85,7 @@ function updateHead(path: string): void {
     canonical.rel = "canonical";
     document.head.appendChild(canonical);
   }
-  canonical.href = `https://prometheus_exporters.asymmetric-effort.com/${path === "/" ? "" : "#" + path}`;
+  canonical.href = `https://prometheus_exporters.phaseshiftdata.com/${path === "/" ? "" : "#" + path}`;
 }
 
 render();

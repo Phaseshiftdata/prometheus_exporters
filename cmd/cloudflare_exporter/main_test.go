@@ -11,10 +11,9 @@ import (
 	"testing"
 	"time"
 
-	cfclient "github.com/asymmetric-effort/prometheus-exporters/internal/cloudflare"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/collector"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/config"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/discovery"
+	cfclient "github.com/phaseshiftdata/prometheus_exporters/internal/cloudflare"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/collector"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/discovery"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -256,8 +255,8 @@ func newMockCFServer() *httptest.Server {
 	}))
 }
 
-func testConfigWithServer(ts *httptest.Server) *config.Config {
-	return &config.Config{
+func testRunConfig() runConfig {
+	return runConfig{
 		APIToken:               "test-token",
 		ScrapeDelay:            300 * time.Second,
 		TimeWindow:             60 * time.Second,
@@ -275,16 +274,15 @@ func testConfigWithServer(ts *httptest.Server) *config.Config {
 }
 
 func TestRun_CapabilitiesOnly(t *testing.T) {
-	// With CapabilitiesOnly=true, Run should perform discovery (which will
+	// With CapabilitiesOnly=true, run should perform discovery (which will
 	// fail with connection errors to the real Cloudflare API), handle the
 	// failure gracefully, serialize the matrix, and return nil.
-	cfg := testConfigWithServer(nil)
-	cfg.CapabilitiesOnly = true
+	rc := testRunConfig()
+	rc.CapabilitiesOnly = true
 
-	logger, _ := zap.NewDevelopment()
-	err := Run(context.Background(), cfg, logger)
+	err := run(context.Background(), rc)
 	if err != nil {
-		t.Fatalf("Run with CapabilitiesOnly should not return error, got: %v", err)
+		t.Fatalf("run with CapabilitiesOnly should not return error, got: %v", err)
 	}
 }
 
@@ -307,19 +305,17 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestRun_WithMockServer(t *testing.T) {
-	// Test Run with a mock Cloudflare API server that makes discovery
+	// Test run with a mock Cloudflare API server that makes discovery
 	// succeed, enabling the successful re-discovery path.
 	ts := newMockCFServer()
 	defer ts.Close()
 
 	client := createMockClient(ts)
 
-	cfg := testConfigWithServer(ts)
-	cfg.CapabilitiesOnly = false
-	cfg.ListenAddress = "127.0.0.1:19202"
-	cfg.DiscoveryInterval = 50 * time.Millisecond
-
-	logger, _ := zap.NewDevelopment()
+	rc := testRunConfig()
+	rc.CapabilitiesOnly = false
+	rc.ListenAddress = "127.0.0.1:19202"
+	rc.DiscoveryInterval = 50 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -347,23 +343,21 @@ func TestRun_WithMockServer(t *testing.T) {
 		cancel()
 	}()
 
-	err := Run(ctx, cfg, logger, client)
+	err := run(ctx, rc, client)
 	if err != nil {
-		t.Fatalf("Run should return nil on clean shutdown, got: %v", err)
+		t.Fatalf("run should return nil on clean shutdown, got: %v", err)
 	}
 }
 
 func TestRun_SignalShutdown(t *testing.T) {
-	// Test that Run shuts down gracefully when receiving SIGINT.
-	cfg := testConfigWithServer(nil)
-	cfg.CapabilitiesOnly = false
-	cfg.ListenAddress = "127.0.0.1:19201"
-
-	logger, _ := zap.NewDevelopment()
+	// Test that run shuts down gracefully when receiving SIGINT.
+	rc := testRunConfig()
+	rc.CapabilitiesOnly = false
+	rc.ListenAddress = "127.0.0.1:19201"
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- Run(context.Background(), cfg, logger)
+		errCh <- run(context.Background(), rc)
 	}()
 
 	// Wait for the server to be ready
@@ -384,24 +378,22 @@ func TestRun_SignalShutdown(t *testing.T) {
 	select {
 	case err := <-errCh:
 		if err != nil {
-			t.Fatalf("Run should return nil on signal shutdown, got: %v", err)
+			t.Fatalf("run should return nil on signal shutdown, got: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("Run did not return within timeout after SIGINT")
+		t.Fatal("run did not return within timeout after SIGINT")
 	}
 }
 
 func TestRun_ShortLivedContext(t *testing.T) {
-	// With CapabilitiesOnly=false, Run starts the HTTP server and blocks.
+	// With CapabilitiesOnly=false, run starts the HTTP server and blocks.
 	// We cancel the context after the server starts to trigger the shutdown
 	// path. Use very short intervals so the goroutine ticker bodies fire at
 	// least once before the context is canceled.
-	cfg := testConfigWithServer(nil)
-	cfg.CapabilitiesOnly = false
-	cfg.DiscoveryInterval = 50 * time.Millisecond
-	cfg.ListenAddress = "127.0.0.1:19199"
-
-	logger, _ := zap.NewDevelopment()
+	rc := testRunConfig()
+	rc.CapabilitiesOnly = false
+	rc.DiscoveryInterval = 50 * time.Millisecond
+	rc.ListenAddress = "127.0.0.1:19199"
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -431,8 +423,41 @@ func TestRun_ShortLivedContext(t *testing.T) {
 		cancel()
 	}()
 
-	err := Run(ctx, cfg, logger)
+	err := run(ctx, rc)
 	if err != nil {
-		t.Fatalf("Run should return nil on clean shutdown, got: %v", err)
+		t.Fatalf("run should return nil on clean shutdown, got: %v", err)
+	}
+}
+
+func TestRootCmd_Version(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"--version"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("--version should not return error, got: %v", err)
+	}
+}
+
+func TestRootCmd_Help(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{"--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("--help should not return error, got: %v", err)
+	}
+}
+
+func TestToInternalConfig(t *testing.T) {
+	rc := testRunConfig()
+	cfg := toInternalConfig(rc)
+	if cfg.APIToken != rc.APIToken {
+		t.Errorf("APIToken mismatch: got %q, want %q", cfg.APIToken, rc.APIToken)
+	}
+	if cfg.ListenAddress != rc.ListenAddress {
+		t.Errorf("ListenAddress mismatch: got %q, want %q", cfg.ListenAddress, rc.ListenAddress)
+	}
+	if cfg.ScrapeDelay != rc.ScrapeDelay {
+		t.Errorf("ScrapeDelay mismatch: got %v, want %v", cfg.ScrapeDelay, rc.ScrapeDelay)
+	}
+	if cfg.CapabilitiesOnly != rc.CapabilitiesOnly {
+		t.Errorf("CapabilitiesOnly mismatch: got %v, want %v", cfg.CapabilitiesOnly, rc.CapabilitiesOnly)
 	}
 }

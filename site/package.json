@@ -1,5 +1,5 @@
 {
-  "name": "@asymmetric-effort/prometheus-exporters-site",
+  "name": "@phaseshiftdata/prometheus-exporters-site",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -10,7 +10,7 @@
     "test": "npx playwright test"
   },
   "dependencies": {
-    "@asymmetric-effort/specifyjs": "latest"
+    "@phaseshiftdata/specifyjs": "latest"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

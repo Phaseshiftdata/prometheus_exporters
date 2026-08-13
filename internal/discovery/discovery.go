@@ -11,7 +11,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/cloudflare"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/cloudflare"
 )
 
 // DatasetState represents the availability state of a dataset.

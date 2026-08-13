@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/cloudflare"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/cloudflare"
 	"go.uber.org/zap"
 )
 

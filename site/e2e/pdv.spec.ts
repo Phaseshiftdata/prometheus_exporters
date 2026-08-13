@@ -63,7 +63,7 @@ test.describe("post-deployment verification", () => {
   test("cloudflare exporter page has installation instructions", async ({ page }) => {
     await page.goto("/#/cloudflare-exporter");
     await expect(page.locator(".main")).toContainText("docker");
-    await expect(page.locator(".main")).toContainText("ghcr.io/asymmetric-effort/cloudflare_exporter");
+    await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/cloudflare_exporter");
   });
 
   test("footer contains correct links", async ({ page }) => {
@@ -94,14 +94,14 @@ test.describe("post-deployment verification", () => {
     expect(response.status()).toBe(200);
     const body = await response.text();
     expect(body).toContain("urlset");
-    expect(body).toContain("prometheus_exporters.asymmetric-effort.com");
+    expect(body).toContain("prometheus_exporters.phaseshiftdata.com");
   });
 
   test("CNAME file is served", async ({ request }) => {
     const response = await request.get("/CNAME");
     expect(response.status()).toBe(200);
     const body = await response.text();
-    expect(body.trim()).toBe("prometheus_exporters.asymmetric-effort.com");
+    expect(body.trim()).toBe("prometheus_exporters.phaseshiftdata.com");
   });
 
   test("404 page redirects to root", async ({ page }) => {

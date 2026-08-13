@@ -8,8 +8,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/collector"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/governor"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/collector"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/governor"
 )
 
 // mockCollector implements collector.Collector for testing.

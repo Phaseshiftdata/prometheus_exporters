@@ -8,58 +8,222 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	cfclient "github.com/asymmetric-effort/prometheus-exporters/internal/cloudflare"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/collector"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/config"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/discovery"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/governor"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/scheduler"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/server"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/store"
-)
-
-// Build-time variables injected via ldflags.
-var (
-	version  = "dev"
-	revision = "unknown"
+	cfclient "github.com/phaseshiftdata/prometheus_exporters/internal/cloudflare"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/collector"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/config"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/discovery"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/governor"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/scheduler"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/server"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/store"
+	"github.com/phaseshiftdata/prometheus_exporters/src/version"
 )
 
 func main() {
-	config.SetBuildInfo(version, revision, runtime.Version())
+	os.Exit(execute())
+}
 
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
-		os.Exit(1)
+func execute() int {
+	if err := rootCmd().Execute(); err != nil {
+		return 1
+	}
+	return 0
+}
+
+// runConfig holds all configuration needed by the run function, populated
+// from Cobra flags and environment variable fallbacks.
+type runConfig struct {
+	APIToken               string
+	Accounts               []string
+	Zones                  []string
+	ZonesExclude           []string
+	ScrapeDelay            time.Duration
+	TimeWindow             time.Duration
+	RefreshInterval        time.Duration
+	DiscoveryInterval      time.Duration
+	GraphQLBudgetPerWindow int
+	RESTBudgetPerWindow    int
+	CollectorsEnabled      []string
+	GatewayCategoryAllow   []string
+	GatewayCategoryTopN    int
+	RequestTimeout         time.Duration
+	ListenAddress          string
+	MetricsPath            string
+	TLSCertFile            string
+	TLSKeyFile             string
+	BasicAuthUsername      string
+	BasicAuthPassword      string
+	LogLevel               string
+	CapabilitiesOnly       bool
+}
+
+// defaults
+const (
+	defaultScrapeDelaySeconds       = 300
+	defaultTimeWindowSeconds        = 60
+	defaultRefreshIntervalSeconds   = 60
+	defaultDiscoveryIntervalSeconds = 21600
+	defaultGraphQLBudgetPerWindow   = 160
+	defaultRESTBudgetPerWindow      = 600
+	defaultGatewayCategoryTopN      = 25
+	defaultRequestTimeoutSeconds    = 10
+	defaultListenAddress            = ":9199"
+	defaultMetricsPath              = "/metrics"
+	defaultLogLevel                 = "info"
+)
+
+func rootCmd() *cobra.Command {
+	var (
+		apiToken             string
+		accounts             string
+		zones                string
+		zonesExclude         string
+		scrapeDelay          int
+		timeWindow           int
+		refreshInterval      int
+		discoveryInterval    int
+		graphqlBudget        int
+		restBudget           int
+		collectorsEnabled    string
+		gatewayCategoryAllow string
+		gatewayCategoryTopN  int
+		requestTimeout       int
+		listenAddress        string
+		metricsPath          string
+		tlsCertFile          string
+		tlsKeyFile           string
+		basicAuthUsername     string
+		basicAuthPassword    string
+		logLevel             string
+		capabilitiesOnly     bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "cloudflare_exporter",
+		Short: "Prometheus exporter for Cloudflare Zero Trust, DNS, and domain metrics",
+		Version: fmt.Sprintf("%s (commit: %s, built: %s)",
+			version.Version, version.GitCommit, version.BuildDate),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rc := runConfig{
+				APIToken:               resolveString(cmd, "cf.api-token", apiToken, "CF_API_TOKEN", ""),
+				Accounts:               splitCSV(resolveString(cmd, "cf.accounts", accounts, "CF_ACCOUNTS", "")),
+				Zones:                  splitCSV(resolveString(cmd, "cf.zones", zones, "CF_ZONES", "")),
+				ZonesExclude:           splitCSV(resolveString(cmd, "cf.zones-exclude", zonesExclude, "CF_ZONES_EXCLUDE", "")),
+				ScrapeDelay:            time.Duration(resolveInt(cmd, "cf.scrape-delay", scrapeDelay, "CF_SCRAPE_DELAY_SECONDS", defaultScrapeDelaySeconds)) * time.Second,
+				TimeWindow:             time.Duration(resolveInt(cmd, "cf.time-window", timeWindow, "CF_TIME_WINDOW_SECONDS", defaultTimeWindowSeconds)) * time.Second,
+				RefreshInterval:        time.Duration(resolveInt(cmd, "cf.refresh-interval", refreshInterval, "CF_REFRESH_INTERVAL_SECONDS", defaultRefreshIntervalSeconds)) * time.Second,
+				DiscoveryInterval:      time.Duration(resolveInt(cmd, "cf.discovery-interval", discoveryInterval, "CF_DISCOVERY_INTERVAL_SECONDS", defaultDiscoveryIntervalSeconds)) * time.Second,
+				GraphQLBudgetPerWindow: resolveInt(cmd, "cf.graphql-budget", graphqlBudget, "CF_GRAPHQL_BUDGET_PER_WINDOW", defaultGraphQLBudgetPerWindow),
+				RESTBudgetPerWindow:    resolveInt(cmd, "cf.rest-budget", restBudget, "CF_REST_BUDGET_PER_WINDOW", defaultRESTBudgetPerWindow),
+				CollectorsEnabled:      splitCSV(resolveString(cmd, "cf.collectors-enabled", collectorsEnabled, "CF_COLLECTORS_ENABLED", "")),
+				GatewayCategoryAllow:   splitCSV(resolveString(cmd, "cf.gateway-category-allowlist", gatewayCategoryAllow, "CF_GATEWAY_CATEGORY_ALLOWLIST", "")),
+				GatewayCategoryTopN:    resolveInt(cmd, "cf.gateway-category-top-n", gatewayCategoryTopN, "CF_GATEWAY_CATEGORY_TOP_N", defaultGatewayCategoryTopN),
+				RequestTimeout:         time.Duration(resolveInt(cmd, "cf.request-timeout", requestTimeout, "CF_REQUEST_TIMEOUT_SECONDS", defaultRequestTimeoutSeconds)) * time.Second,
+				ListenAddress:          resolveString(cmd, "web.listen-address", listenAddress, "LISTEN_ADDRESS", defaultListenAddress),
+				MetricsPath:            resolveString(cmd, "web.metrics-path", metricsPath, "METRICS_PATH", defaultMetricsPath),
+				TLSCertFile:            tlsCertFile,
+				TLSKeyFile:             tlsKeyFile,
+				BasicAuthUsername:       basicAuthUsername,
+				BasicAuthPassword:       basicAuthPassword,
+				LogLevel:               resolveString(cmd, "log.level", logLevel, "LOG_LEVEL", defaultLogLevel),
+				CapabilitiesOnly:       capabilitiesOnly,
+			}
+			return run(cmd.Context(), rc)
+		},
 	}
 
-	logger := buildLogger(cfg.LogLevel)
-	defer logger.Sync()
+	cmd.Flags().StringVar(&apiToken, "cf.api-token", "", "Cloudflare scoped API token (env: CF_API_TOKEN)")
+	cmd.Flags().StringVar(&accounts, "cf.accounts", "", "Comma-separated account IDs (env: CF_ACCOUNTS)")
+	cmd.Flags().StringVar(&zones, "cf.zones", "", "Comma-separated zone IDs to include (env: CF_ZONES)")
+	cmd.Flags().StringVar(&zonesExclude, "cf.zones-exclude", "", "Comma-separated zone IDs to exclude (env: CF_ZONES_EXCLUDE)")
 
-	if err := Run(context.Background(), cfg, logger); err != nil {
-		logger.Fatal("exporter error", zap.Error(err))
+	cmd.Flags().IntVar(&scrapeDelay, "cf.scrape-delay", defaultScrapeDelaySeconds, "Propagation delay in seconds (env: CF_SCRAPE_DELAY_SECONDS)")
+	cmd.Flags().IntVar(&timeWindow, "cf.time-window", defaultTimeWindowSeconds, "Query window width in seconds (env: CF_TIME_WINDOW_SECONDS)")
+	cmd.Flags().IntVar(&refreshInterval, "cf.refresh-interval", defaultRefreshIntervalSeconds, "Base collection interval in seconds (env: CF_REFRESH_INTERVAL_SECONDS)")
+	cmd.Flags().IntVar(&discoveryInterval, "cf.discovery-interval", defaultDiscoveryIntervalSeconds, "Capability re-discovery interval in seconds (env: CF_DISCOVERY_INTERVAL_SECONDS)")
+
+	cmd.Flags().IntVar(&graphqlBudget, "cf.graphql-budget", defaultGraphQLBudgetPerWindow, "GraphQL budget per window (env: CF_GRAPHQL_BUDGET_PER_WINDOW)")
+	cmd.Flags().IntVar(&restBudget, "cf.rest-budget", defaultRESTBudgetPerWindow, "REST budget per window (env: CF_REST_BUDGET_PER_WINDOW)")
+
+	cmd.Flags().StringVar(&collectorsEnabled, "cf.collectors-enabled", "", "Comma-separated collector allow-list (env: CF_COLLECTORS_ENABLED)")
+
+	cmd.Flags().StringVar(&gatewayCategoryAllow, "cf.gateway-category-allowlist", "", "Comma-separated Gateway category allowlist (env: CF_GATEWAY_CATEGORY_ALLOWLIST)")
+	cmd.Flags().IntVar(&gatewayCategoryTopN, "cf.gateway-category-top-n", defaultGatewayCategoryTopN, "Bucket categories beyond top N into other (env: CF_GATEWAY_CATEGORY_TOP_N)")
+
+	cmd.Flags().IntVar(&requestTimeout, "cf.request-timeout", defaultRequestTimeoutSeconds, "Per-request upstream timeout in seconds (env: CF_REQUEST_TIMEOUT_SECONDS)")
+
+	cmd.Flags().StringVar(&listenAddress, "web.listen-address", defaultListenAddress, "Bind address (env: LISTEN_ADDRESS)")
+	cmd.Flags().StringVar(&metricsPath, "web.metrics-path", defaultMetricsPath, "Exposition path (env: METRICS_PATH)")
+
+	cmd.Flags().StringVar(&tlsCertFile, "web.tls-cert-file", "", "TLS certificate file path")
+	cmd.Flags().StringVar(&tlsKeyFile, "web.tls-key-file", "", "TLS private key file path")
+
+	cmd.Flags().StringVar(&basicAuthUsername, "web.basic-auth-username", "", "Basic auth username")
+	cmd.Flags().StringVar(&basicAuthPassword, "web.basic-auth-password", "", "Basic auth password")
+
+	cmd.Flags().StringVar(&logLevel, "log.level", defaultLogLevel, "Log level: debug, info, warn, error (env: LOG_LEVEL)")
+
+	cmd.Flags().BoolVar(&capabilitiesOnly, "capabilities", false, "Print discovered capabilities and exit")
+
+	return cmd
+}
+
+// toInternalConfig converts a runConfig to the internal config.Config struct
+// used by registerCollectors and other internal plumbing.
+func toInternalConfig(rc runConfig) *config.Config {
+	return &config.Config{
+		APIToken:                 rc.APIToken,
+		Accounts:                 rc.Accounts,
+		Zones:                    rc.Zones,
+		ZonesExclude:             rc.ZonesExclude,
+		ScrapeDelay:              rc.ScrapeDelay,
+		TimeWindow:               rc.TimeWindow,
+		RefreshInterval:          rc.RefreshInterval,
+		DiscoveryInterval:        rc.DiscoveryInterval,
+		GraphQLBudgetPerWindow:   rc.GraphQLBudgetPerWindow,
+		RESTBudgetPerWindow:      rc.RESTBudgetPerWindow,
+		CollectorsEnabled:        rc.CollectorsEnabled,
+		GatewayCategoryAllowlist: rc.GatewayCategoryAllow,
+		GatewayCategoryTopN:      rc.GatewayCategoryTopN,
+		RequestTimeout:           rc.RequestTimeout,
+		ListenAddress:            rc.ListenAddress,
+		MetricsPath:              rc.MetricsPath,
+		TLSCertFile:              rc.TLSCertFile,
+		TLSKeyFile:               rc.TLSKeyFile,
+		BasicAuthUsername:         rc.BasicAuthUsername,
+		BasicAuthPassword:         rc.BasicAuthPassword,
+		LogLevel:                 rc.LogLevel,
+		CapabilitiesOnly:         rc.CapabilitiesOnly,
 	}
 }
 
-// Run is the main entry point for the exporter, extracted from main() so it
-// can be tested. It blocks until the context is canceled or a shutdown signal
-// is received. An optional *cfclient.Client may be passed for testing; if nil
-// a new client is created from the config.
-func Run(ctx context.Context, cfg *config.Config, logger *zap.Logger, clientOverride ...*cfclient.Client) error {
+// run is the main entry point for the exporter. It blocks until the context
+// is canceled or a shutdown signal is received.
+func run(ctx context.Context, rc runConfig, clientOverride ...*cfclient.Client) error {
+	logger := buildLogger(rc.LogLevel)
+	defer logger.Sync()
+
 	logger.Info("starting cloudflare_exporter",
-		zap.String("version", version),
-		zap.String("revision", revision),
+		zap.String("version", version.Version),
+		zap.String("commit", version.GitCommit),
+		zap.String("built", version.BuildDate),
 		zap.String("go_version", runtime.Version()),
 	)
+
+	cfg := toInternalConfig(rc)
 
 	// Create Cloudflare client
 	var client *cfclient.Client
@@ -77,7 +241,7 @@ func Run(ctx context.Context, cfg *config.Config, logger *zap.Logger, clientOver
 	gov := governor.NewGovernor(cfg.GraphQLBudgetPerWindow, cfg.RESTBudgetPerWindow)
 
 	// Create self-instrumentation metrics
-	selfMetrics := collector.NewSelfMetrics(version, revision, runtime.Version())
+	selfMetrics := collector.NewSelfMetrics(version.Version, version.GitCommit, runtime.Version())
 
 	// Create HTTP server
 	srv := server.NewServer(server.Config{
@@ -489,4 +653,55 @@ func updateDiscoveryMetrics(selfMetrics *collector.SelfMetrics, matrix *discover
 			selfMetrics.DatasetsUnavail.WithLabelValues(cap.Dataset, string(cap.State)).Set(1)
 		}
 	}
+}
+
+// resolveString returns the flag value if it was explicitly set on the command
+// line, otherwise the environment variable value if present, otherwise the
+// provided default.
+func resolveString(cmd *cobra.Command, flagName, flagVal, envKey, defaultVal string) string {
+	if cmd.Flags().Changed(flagName) {
+		return flagVal
+	}
+	if v, ok := os.LookupEnv(envKey); ok {
+		return v
+	}
+	if defaultVal != "" {
+		return defaultVal
+	}
+	return flagVal
+}
+
+// resolveInt returns the flag value if it was explicitly set on the command
+// line, otherwise parses the environment variable if present, otherwise
+// returns the default.
+func resolveInt(cmd *cobra.Command, flagName string, flagVal int, envKey string, defaultVal int) int {
+	if cmd.Flags().Changed(flagName) {
+		return flagVal
+	}
+	if v, ok := os.LookupEnv(envKey); ok {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			return parsed
+		}
+	}
+	return defaultVal
+}
+
+// splitCSV splits a comma-separated string into trimmed, non-empty parts.
+// An empty input returns nil.
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

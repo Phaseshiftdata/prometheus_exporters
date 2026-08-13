@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/cloudflare"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/cloudflare"
 )
 
 func TestZoneStatusCollector_Collect(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/store"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/store"
 )
 
 func gatewayDNSResponseData() interface{} {

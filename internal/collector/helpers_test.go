@@ -3,7 +3,7 @@ package collector
 import (
 	"testing"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/store"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/store"
 )
 
 func TestParseDimensionKey(t *testing.T) {

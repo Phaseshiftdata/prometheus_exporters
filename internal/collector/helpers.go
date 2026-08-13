@@ -3,7 +3,7 @@ package collector
 import (
 	"strings"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/store"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/store"
 )
 
 // parseDimensionKey splits a DimensionKey back into its component parts.

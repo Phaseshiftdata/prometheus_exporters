@@ -12,7 +12,7 @@ infrastructure, IPsec tunnels, and Cloudflare services.
 ## Documentation
 
 - [cloudflare_exporter docs](docs/cloudflare_exporter.md)
-- [Full documentation site](https://prometheus_exporters.asymmetric-effort.com)
+- [Full documentation site](https://prometheus_exporters.phaseshiftdata.com)
 
 ## Contributing
 

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/asymmetric-effort/prometheus-exporters/internal/cloudflare"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/governor"
-	"github.com/asymmetric-effort/prometheus-exporters/internal/store"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/cloudflare"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/governor"
+	"github.com/phaseshiftdata/prometheus_exporters/internal/store"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )

@@ -13,7 +13,7 @@ responsibly.
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Instead, please send an email to <security@asymmetric-effort.com> with the
+Instead, please send an email to <security@phaseshiftdata.com> with the
 following information:
 
 - Description of the vulnerability

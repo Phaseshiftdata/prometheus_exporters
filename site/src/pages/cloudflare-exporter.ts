@@ -119,13 +119,13 @@ export function CloudflareExporterPage(): string {
     <div class="section">
       <h2>Installation</h2>
       <p>Container images are published to GitHub Container Registry:</p>
-      <pre><code>ghcr.io/asymmetric-effort/cloudflare_exporter</code></pre>
+      <pre><code>ghcr.io/phaseshiftdata/cloudflare_exporter</code></pre>
       <pre><code># Run with an API token
 docker run -d \\
   --name cloudflare_exporter \\
   -p 9199:9199 \\
   -e CF_API_TOKEN="your-cloudflare-api-token" \\
-  ghcr.io/asymmetric-effort/cloudflare_exporter:main</code></pre>
+  ghcr.io/phaseshiftdata/cloudflare_exporter:main</code></pre>
     </div>
 
     <div class="section">
@@ -186,7 +186,7 @@ docker run -d \\
       <h3>CLI Flag</h3>
       <pre><code>docker run --rm \\
   -e CF_API_TOKEN="your-token" \\
-  ghcr.io/asymmetric-effort/cloudflare_exporter:main \\
+  ghcr.io/phaseshiftdata/cloudflare_exporter:main \\
   --capabilities</code></pre>
       <p>This prints a JSON summary of discovered capabilities and exits.</p>
       <h3>HTTP Endpoint</h3>
@@ -285,7 +285,7 @@ spec:
     spec:
       containers:
         - name: cloudflare-exporter
-          image: ghcr.io/asymmetric-effort/cloudflare_exporter:main
+          image: ghcr.io/phaseshiftdata/cloudflare_exporter:main
           ports:
             - containerPort: 9199
           env:
