@@ -11,12 +11,16 @@ exclude_paths:
 allowlists:
   - description: "Test database connection strings with dummy credentials"
     paths:
-      - "*_test.go"
-    rules:
-      - "postgresql-connection-string"
+      - ".*_test\\.go$"
+    stop_words:
+      - "postgres:test@"
+      - "nobody:nothing@"
+      - "connect_timeout="
   - description: "Example API tokens in documentation and site pages"
     paths:
-      - "docs/"
-      - "site/src/pages/"
-    rules:
-      - "generic-api-key"
+      - "docs/.*"
+      - "site/src/pages/.*"
+    stop_words:
+      - "your-cloudflare-api-token"
+      - "your-token"
+      - "CF_API_TOKEN"
