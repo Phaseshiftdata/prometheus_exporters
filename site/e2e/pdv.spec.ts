@@ -179,9 +179,9 @@ test.describe("post-deployment verification", () => {
 
   test("cloudflare exporter page has API token section", async ({ page }) => {
     await page.goto("/#/cloudflare-exporter");
-    await expect(page.locator(".main")).toContainText("API Token");
-    await expect(page.locator(".main")).toContainText("Account Analytics");
+    await expect(page.locator(".main")).toContainText("API Token Setup");
     await expect(page.locator(".main")).toContainText("not a Global API Key");
+    await expect(page.locator(".main")).toContainText("My Profile");
   });
 
   test("cloudflare exporter page has endpoints section", async ({ page }) => {
@@ -200,7 +200,7 @@ test.describe("post-deployment verification", () => {
   test("cloudflare exporter page has collection model section", async ({ page }) => {
     await page.goto("/#/cloudflare-exporter");
     await expect(page.locator(".main")).toContainText("Collection Model");
-    await expect(page.locator(".main")).toContainText("five minutes");
+    await expect(page.locator(".main")).toContainText("five-minute");
     await expect(page.locator(".main")).toContainText("double-counting");
   });
 
