@@ -50,6 +50,12 @@ func rootCmd() *cobra.Command {
 		jobBudget            int
 		backfillInterval     time.Duration
 		backfillMinRateLeft  int
+
+		// OpenBao flags
+		openbaoAddress          string
+		openbaoRoleIDFile       string
+		openbaoSecretIDFile     string
+		databasePasswordOpenBao string
 	)
 
 	cmd := &cobra.Command{
@@ -58,6 +64,14 @@ func rootCmd() *cobra.Command {
 		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version.Version, version.GitCommit, version.BuildDate),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resolvedDatabaseURL := databaseURL
+
+			// Validate mutual exclusivity of database password sources.
+			// We use an empty string for the "value" source since the
+			// password is embedded in the URL, not a standalone flag.
+			if err := secrets.ValidateSecretSources("database-password", "", databasePasswordFile, databasePasswordOpenBao); err != nil {
+				return err
+			}
+
 			if databasePasswordFile != "" {
 				if resolvedDatabaseURL == "" {
 					resolvedDatabaseURL = os.Getenv("DATABASE_URL")
@@ -73,9 +87,52 @@ func rootCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("parsing --database-url for password substitution: %w", err)
 				}
-				// Check that the URL does not already carry a password.
 				if _, alreadySet := parsed.User.Password(); alreadySet {
 					return fmt.Errorf("--database-password-file and a password in --database-url are mutually exclusive")
+				}
+				user := parsed.User.Username()
+				parsed.User = url.UserPassword(user, pw)
+				resolvedDatabaseURL = parsed.String()
+			}
+
+			if databasePasswordOpenBao != "" {
+				if resolvedDatabaseURL == "" {
+					resolvedDatabaseURL = os.Getenv("DATABASE_URL")
+				}
+				if resolvedDatabaseURL == "" {
+					return fmt.Errorf("--database-password-openbao requires --database-url or DATABASE_URL to be set")
+				}
+
+				obAddr := openbaoAddress
+				if obAddr == "" {
+					obAddr = os.Getenv("OPENBAO_ADDR")
+				}
+
+				obClient, err := secrets.NewOpenBaoClient(secrets.OpenBaoConfig{
+					Address:      obAddr,
+					RoleIDFile:   openbaoRoleIDFile,
+					SecretIDFile: openbaoSecretIDFile,
+				}, prometheus.DefaultRegisterer, slog.Default())
+				if err != nil {
+					return fmt.Errorf("--database-password-openbao: initializing OpenBao client: %w", err)
+				}
+				defer obClient.Close()
+
+				path, field, err := secrets.ParseOpenBaoRef(databasePasswordOpenBao)
+				if err != nil {
+					return fmt.Errorf("--database-password-openbao: %w", err)
+				}
+				pw, err := obClient.ReadSecret(path, field)
+				if err != nil {
+					return fmt.Errorf("--database-password-openbao: %w", err)
+				}
+
+				parsed, err := url.Parse(resolvedDatabaseURL)
+				if err != nil {
+					return fmt.Errorf("parsing --database-url for password substitution: %w", err)
+				}
+				if _, alreadySet := parsed.User.Password(); alreadySet {
+					return fmt.Errorf("--database-password-openbao and a password in --database-url are mutually exclusive")
 				}
 				user := parsed.User.Username()
 				parsed.User = url.UserPassword(user, pw)
@@ -120,6 +177,12 @@ func rootCmd() *cobra.Command {
 		"Minimum spacing between historical backfill requests")
 	cmd.Flags().IntVar(&backfillMinRateLeft, "backfill-min-rate-limit", ghpkg.DefaultBackfillMinRateLimit,
 		"Pause backfill while the remaining GitHub rate limit is below this")
+
+	// OpenBao flags
+	cmd.Flags().StringVar(&openbaoAddress, "openbao-address", "", "OpenBao/Vault server address (env: OPENBAO_ADDR)")
+	cmd.Flags().StringVar(&openbaoRoleIDFile, "openbao-approle-role-id-file", "", "Path to file containing the AppRole role_id")
+	cmd.Flags().StringVar(&openbaoSecretIDFile, "openbao-approle-secret-id-file", "", "Path to file containing the AppRole secret_id")
+	cmd.Flags().StringVar(&databasePasswordOpenBao, "database-password-openbao", "", "OpenBao KV path:field for database password")
 
 	return cmd
 }
