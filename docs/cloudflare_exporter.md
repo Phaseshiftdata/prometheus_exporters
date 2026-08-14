@@ -78,8 +78,33 @@ services:
 
 ## Configuration
 
-All configuration is via environment variables. No configuration file is
-required.
+All configuration is via environment variables or CLI flags. No
+configuration file is required.
+
+### File-Based Secrets
+
+For credentials that should not appear in process argument lists or
+environment variables, the exporter supports reading secrets from files.
+Each credential flag has a `-file` variant:
+
+| Flag | File Variant | Description |
+| --- | --- | --- |
+| `--cf.api-token` | `--cf.api-token-file` | Cloudflare API token |
+| `--web.basic-auth-password` | `--web.basic-auth-password-file` | Basic auth password |
+
+The file is read at startup. Trailing whitespace and newlines are trimmed.
+The exporter exits with an error if the file is missing, unreadable, or
+empty after trimming. Setting both the value flag and its `-file` variant
+is a configuration error.
+
+Example:
+
+```bash
+echo -n "your-cloudflare-token" > /run/secrets/cf_api_token
+cloudflare_exporter --cf.api-token-file /run/secrets/cf_api_token
+```
+
+### Environment Variables
 
 | Variable | Default | Description |
 | --- | --- | --- |

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,6 +21,7 @@ import (
 
 	ghpkg "github.com/phaseshiftdata/prometheus_exporters/src/github"
 	ghdb "github.com/phaseshiftdata/prometheus_exporters/src/github/db"
+	"github.com/phaseshiftdata/prometheus_exporters/src/secrets"
 	"github.com/phaseshiftdata/prometheus_exporters/src/version"
 )
 
@@ -36,17 +38,18 @@ func execute() int {
 
 func rootCmd() *cobra.Command {
 	var (
-		listenAddr          string
-		databaseURL         string
-		appID               int64
-		installID           int64
-		keyFile             string
-		pollInterval        time.Duration
-		org                 string
-		logLevel            string
-		jobBudget           int
-		backfillInterval    time.Duration
-		backfillMinRateLeft int
+		listenAddr           string
+		databaseURL          string
+		databasePasswordFile string
+		appID                int64
+		installID            int64
+		keyFile              string
+		pollInterval         time.Duration
+		org                  string
+		logLevel             string
+		jobBudget            int
+		backfillInterval     time.Duration
+		backfillMinRateLeft  int
 	)
 
 	cmd := &cobra.Command{
@@ -54,9 +57,34 @@ func rootCmd() *cobra.Command {
 		Short:   "Prometheus exporter for GitHub CI/CD and repository statistics",
 		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version.Version, version.GitCommit, version.BuildDate),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedDatabaseURL := databaseURL
+			if databasePasswordFile != "" {
+				if resolvedDatabaseURL == "" {
+					resolvedDatabaseURL = os.Getenv("DATABASE_URL")
+				}
+				if resolvedDatabaseURL == "" {
+					return fmt.Errorf("--database-password-file requires --database-url or DATABASE_URL to be set")
+				}
+				pw, err := secrets.ReadSecretFile(databasePasswordFile)
+				if err != nil {
+					return fmt.Errorf("--database-password-file: %w", err)
+				}
+				parsed, err := url.Parse(resolvedDatabaseURL)
+				if err != nil {
+					return fmt.Errorf("parsing --database-url for password substitution: %w", err)
+				}
+				// Check that the URL does not already carry a password.
+				if _, alreadySet := parsed.User.Password(); alreadySet {
+					return fmt.Errorf("--database-password-file and a password in --database-url are mutually exclusive")
+				}
+				user := parsed.User.Username()
+				parsed.User = url.UserPassword(user, pw)
+				resolvedDatabaseURL = parsed.String()
+			}
+
 			return run(cmd.Context(), runConfig{
 				listenAddr:          listenAddr,
-				databaseURL:         databaseURL,
+				databaseURL:         resolvedDatabaseURL,
 				appID:               appID,
 				installID:           installID,
 				keyFile:             keyFile,
@@ -72,6 +100,7 @@ func rootCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&listenAddr, "listen-address", "127.0.0.1:9102", "Address to listen on for metrics")
 	cmd.Flags().StringVar(&databaseURL, "database-url", "", "PostgreSQL connection string (or DATABASE_URL env)")
+	cmd.Flags().StringVar(&databasePasswordFile, "database-password-file", "", "Path to file containing the database password (substituted into --database-url)")
 	cmd.Flags().Int64Var(&appID, "github-app-id", 0, "GitHub App ID")
 	cmd.Flags().Int64Var(&installID, "github-install-id", 0, "GitHub App Installation ID")
 	cmd.Flags().StringVar(&keyFile, "github-key-file", "", "Path to GitHub App private key PEM")
