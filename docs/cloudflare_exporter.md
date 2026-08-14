@@ -104,6 +104,81 @@ echo -n "your-cloudflare-token" > /run/secrets/cf_api_token
 cloudflare_exporter --cf.api-token-file /run/secrets/cf_api_token
 ```
 
+### OpenBao-Backed Secrets
+
+For deployments that use [OpenBao](https://openbao.org/) (or HashiCorp Vault)
+as a central secret store, the exporter can read credentials directly from a
+KV v2 secret engine. This avoids placing secrets on disk entirely.
+
+#### Connection Flags
+
+| Flag | Env Variable | Description |
+| --- | --- | --- |
+| `--openbao-address` | `OPENBAO_ADDR` | OpenBao/Vault server address (e.g. `https://vault.example.com:8200`). |
+| `--openbao-approle-role-id-file` | | Path to a file containing the AppRole `role_id`. |
+| `--openbao-approle-secret-id-file` | | Path to a file containing the AppRole `secret_id`. |
+
+#### Secret Reference Flags
+
+| Flag | Description |
+| --- | --- |
+| `--cf.api-token-openbao=<kv-path>:<field>` | Read the Cloudflare API token from the given KV v2 path and field. |
+
+The reference format is `<kv-path>:<field>`. For example,
+`secret/cloudflare/exporter:api_token` reads the `api_token` field from
+the KV v2 secret at `secret/cloudflare/exporter`. The exporter
+automatically inserts the `/data/` segment required by the KV v2 API if
+it is missing.
+
+#### Behavior
+
+- **Retry on sealed vault.** If the vault is sealed or unreachable at
+  startup, the exporter logs a warning and retries with exponential
+  backoff (up to five minutes) in the background. `ReadSecret` calls
+  return an error until a token is obtained.
+- **Token renewal.** A background goroutine renews the AppRole token at
+  two-thirds of its TTL. If renewal fails, the client falls back to a
+  full re-login.
+- **Metrics emitted.** The following self-instrumentation metrics are
+  registered when OpenBao is enabled:
+
+  | Metric | Type | Description |
+  | --- | --- | --- |
+  | `openbao_authenticated` | gauge | 1 when the exporter holds a valid token, 0 otherwise. |
+  | `openbao_read_errors_total` | counter | Secret read errors, labeled by `reason`. |
+  | `openbao_last_read_success_timestamp_seconds` | gauge | Unix timestamp of the last successful secret read. |
+  | `openbao_token_renewals_total` | counter | Successful token renewals. |
+  | `openbao_token_renewal_errors_total` | counter | Token renewal errors. |
+
+#### Example
+
+```bash
+docker run -d \
+  --name cloudflare_exporter \
+  -p 9199:9199 \
+  -v /run/secrets:/run/secrets:ro \
+  ghcr.io/phaseshiftdata/cloudflare_exporter:main \
+  --openbao-address https://vault.example.com:8200 \
+  --openbao-approle-role-id-file /run/secrets/role_id \
+  --openbao-approle-secret-id-file /run/secrets/secret_id \
+  --cf.api-token-openbao secret/cloudflare/exporter:api_token
+```
+
+### Secret Configuration Summary
+
+The three forms of secret configuration are mutually exclusive for each
+credential. Setting more than one source for the same secret is a
+configuration error.
+
+| Credential | Flag / Env | File | OpenBao |
+| --- | --- | --- | --- |
+| Cloudflare API token | `--cf.api-token` / `CF_API_TOKEN` | `--cf.api-token-file` | `--cf.api-token-openbao` |
+| Basic-auth password | `--web.basic-auth-password` | `--web.basic-auth-password-file` | *(not yet supported)* |
+
+**Preferred order:** OpenBao (secrets never touch disk) > file-based
+(secrets stay out of process arguments and environment) > flag/env
+(simplest, but visible in process listings).
+
 ### Environment Variables
 
 | Variable | Default | Description |
