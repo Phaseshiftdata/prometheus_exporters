@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"runtime"
@@ -111,6 +112,12 @@ func rootCmd() *cobra.Command {
 		basicAuthPasswordFile string
 		logLevel             string
 		capabilitiesOnly     bool
+
+		// OpenBao flags
+		openbaoAddress       string
+		openbaoRoleIDFile    string
+		openbaoSecretIDFile  string
+		apiTokenOpenBao      string
 	)
 
 	cmd := &cobra.Command{
@@ -122,13 +129,40 @@ func rootCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Resolve file-based secrets before building the config.
 			resolvedAPIToken := resolveString(cmd, "cf.api-token", apiToken, "CF_API_TOKEN", "")
+
+			// Validate mutual exclusivity of the three secret sources.
+			if err := secrets.ValidateSecretSources("cf.api-token", resolvedAPIToken, apiTokenFile, apiTokenOpenBao); err != nil {
+				return err
+			}
+
 			if apiTokenFile != "" {
-				if resolvedAPIToken != "" {
-					return fmt.Errorf("--cf.api-token and --cf.api-token-file are mutually exclusive")
-				}
 				v, err := secrets.ReadSecretFile(apiTokenFile)
 				if err != nil {
 					return fmt.Errorf("--cf.api-token-file: %w", err)
+				}
+				resolvedAPIToken = v
+			}
+
+			// OpenBao-backed API token.
+			if apiTokenOpenBao != "" {
+				obAddr := resolveString(cmd, "openbao-address", openbaoAddress, "OPENBAO_ADDR", "")
+				obClient, err := secrets.NewOpenBaoClient(secrets.OpenBaoConfig{
+					Address:      obAddr,
+					RoleIDFile:   openbaoRoleIDFile,
+					SecretIDFile: openbaoSecretIDFile,
+				}, prometheus.DefaultRegisterer, buildSlogLogger(resolveString(cmd, "log.level", logLevel, "LOG_LEVEL", defaultLogLevel)))
+				if err != nil {
+					return fmt.Errorf("--cf.api-token-openbao: initializing OpenBao client: %w", err)
+				}
+				defer obClient.Close()
+
+				path, field, err := secrets.ParseOpenBaoRef(apiTokenOpenBao)
+				if err != nil {
+					return fmt.Errorf("--cf.api-token-openbao: %w", err)
+				}
+				v, err := obClient.ReadSecret(path, field)
+				if err != nil {
+					return fmt.Errorf("--cf.api-token-openbao: %w", err)
 				}
 				resolvedAPIToken = v
 			}
@@ -207,6 +241,12 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&logLevel, "log.level", defaultLogLevel, "Log level: debug, info, warn, error (env: LOG_LEVEL)")
 
 	cmd.Flags().BoolVar(&capabilitiesOnly, "capabilities", false, "Print discovered capabilities and exit")
+
+	// OpenBao flags
+	cmd.Flags().StringVar(&openbaoAddress, "openbao-address", "", "OpenBao/Vault server address (env: OPENBAO_ADDR)")
+	cmd.Flags().StringVar(&openbaoRoleIDFile, "openbao-approle-role-id-file", "", "Path to file containing the AppRole role_id")
+	cmd.Flags().StringVar(&openbaoSecretIDFile, "openbao-approle-secret-id-file", "", "Path to file containing the AppRole secret_id")
+	cmd.Flags().StringVar(&apiTokenOpenBao, "cf.api-token-openbao", "", "OpenBao KV path:field for Cloudflare API token")
 
 	return cmd
 }
@@ -714,6 +754,23 @@ func resolveInt(cmd *cobra.Command, flagName string, flagVal int, envKey string,
 		}
 	}
 	return defaultVal
+}
+
+// buildSlogLogger creates a *slog.Logger for the OpenBao client, matching
+// the configured log level.
+func buildSlogLogger(level string) *slog.Logger {
+	var lvl slog.Level
+	switch level {
+	case "debug":
+		lvl = slog.LevelDebug
+	case "warn":
+		lvl = slog.LevelWarn
+	case "error":
+		lvl = slog.LevelError
+	default:
+		lvl = slog.LevelInfo
+	}
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
 }
 
 // splitCSV splits a comma-separated string into trimmed, non-empty parts.
