@@ -138,6 +138,80 @@ docker run -d \\
     </div>
 
     <div class="section">
+      <h2>Secret Configuration</h2>
+      <p>
+        Credentials such as the Cloudflare API token can be provided in three
+        mutually exclusive ways. Setting more than one source for the same
+        secret is a configuration error.
+      </p>
+
+      <h3>Flag / Environment Variable</h3>
+      <p>
+        Pass the secret directly via <code>--cf.api-token</code> or
+        <code>CF_API_TOKEN</code>. This is the simplest approach but the value
+        is visible in process listings and the environment.
+      </p>
+
+      <h3>File-Based Secrets</h3>
+      <p>
+        Each credential flag has a <code>-file</code> variant that reads the
+        value from a file at startup. Trailing whitespace and newlines are
+        trimmed. The exporter exits with an error if the file is missing,
+        unreadable, or empty after trimming.
+      </p>
+      <table>
+        <thead><tr><th>Flag</th><th>File Variant</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>--cf.api-token</code></td><td><code>--cf.api-token-file</code></td><td>Cloudflare API token</td></tr>
+          <tr><td><code>--web.basic-auth-password</code></td><td><code>--web.basic-auth-password-file</code></td><td>Basic auth password for the metrics endpoint</td></tr>
+        </tbody>
+      </table>
+
+      <h3>OpenBao-Backed Secrets</h3>
+      <p>
+        For deployments using <a href="https://openbao.org/">OpenBao</a> (or
+        HashiCorp Vault) as a central secret store, the exporter can read
+        credentials directly from a KV v2 secret engine. This avoids placing
+        secrets on disk entirely.
+      </p>
+      <table>
+        <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>--openbao-address</code></td><td>OpenBao/Vault server address (env: <code>OPENBAO_ADDR</code>).</td></tr>
+          <tr><td><code>--openbao-approle-role-id-file</code></td><td>Path to a file containing the AppRole <code>role_id</code>.</td></tr>
+          <tr><td><code>--openbao-approle-secret-id-file</code></td><td>Path to a file containing the AppRole <code>secret_id</code>.</td></tr>
+          <tr><td><code>--cf.api-token-openbao=&lt;path&gt;:&lt;field&gt;</code></td><td>Read the API token from the given KV v2 path and field.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The reference format is <code>&lt;kv-path&gt;:&lt;field&gt;</code>, for
+        example <code>secret/cloudflare/exporter:api_token</code>. If the vault
+        is sealed or unreachable at startup, the exporter retries with
+        exponential backoff in the background. A background goroutine
+        automatically renews the AppRole token before it expires.
+      </p>
+
+      <h3>Summary</h3>
+      <table>
+        <thead><tr><th>Credential</th><th>Flag / Env</th><th>File</th><th>OpenBao</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Cloudflare API token</td>
+            <td><code>--cf.api-token</code> / <code>CF_API_TOKEN</code></td>
+            <td><code>--cf.api-token-file</code></td>
+            <td><code>--cf.api-token-openbao</code></td>
+          </tr>
+          <tr>
+            <td>Basic-auth password</td>
+            <td><code>--web.basic-auth-password</code></td>
+            <td><code>--web.basic-auth-password-file</code></td>
+            <td><em>not yet supported</em></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
       <h2>API Token Setup</h2>
       <p>The exporter requires a Cloudflare API <strong>token</strong> (not a Global API Key). Create one under <strong>My Profile &gt; API Tokens</strong> in the Cloudflare dashboard.</p>
       <table>
