@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -739,5 +740,163 @@ func TestRunWithRealDatabase(t *testing.T) {
 	}
 	if n == 0 {
 		t.Error("schema_migrations is empty; run() did not apply any migration")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// --database-password-file tests
+// ---------------------------------------------------------------------------
+
+func writeSecretFile(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "secret")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestRootCmd_DatabasePasswordFile(t *testing.T) {
+	// The password file contents should be substituted into the database URL.
+	keyFile := generateTestKeyFile(t)
+	pwFile := writeSecretFile(t, "s3cret\n")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-url", "postgres://myuser@localhost:5432/mydb?sslmode=disable&connect_timeout=1",
+		"--database-password-file", pwFile,
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", keyFile,
+		"--log-level", "error",
+	})
+
+	// This will fail trying to connect to the database, but it exercises the
+	// password substitution path. We check for a connect error, not a flag error.
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error (connect failure), got nil")
+	}
+	// Should be a database connection error, not a flag parsing error.
+	if strings.Contains(err.Error(), "database-password-file") {
+		t.Fatalf("expected a connect error, got a flag error: %v", err)
+	}
+}
+
+func TestRootCmd_DatabasePasswordFile_NoDatabaseURL(t *testing.T) {
+	pwFile := writeSecretFile(t, "s3cret\n")
+	os.Unsetenv("DATABASE_URL")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-password-file", pwFile,
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", "/nonexistent/key.pem",
+		"--log-level", "error",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when --database-password-file is set without --database-url")
+	}
+	if !strings.Contains(err.Error(), "requires --database-url") {
+		t.Fatalf("expected missing URL error, got: %v", err)
+	}
+}
+
+func TestRootCmd_DatabasePasswordFile_MissingFile(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-url", "postgres://user@localhost/db",
+		"--database-password-file", "/nonexistent/pw",
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", "/nonexistent/key.pem",
+		"--log-level", "error",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for missing password file")
+	}
+}
+
+func TestRootCmd_DatabasePasswordFile_ConflictWithInlinePassword(t *testing.T) {
+	pwFile := writeSecretFile(t, "s3cret\n")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-url", "postgres://user:inlinepw@localhost/db",
+		"--database-password-file", pwFile,
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", "/nonexistent/key.pem",
+		"--log-level", "error",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when URL already contains a password")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("expected mutually exclusive error, got: %v", err)
+	}
+}
+
+func TestRootCmd_DatabasePasswordFile_URLSubstitution(t *testing.T) {
+	// Verify that the password is correctly placed into the URL userinfo.
+	// We do this by testing the URL parsing logic directly.
+	rawURL := "postgres://myuser@localhost:5432/mydb?sslmode=disable"
+	pw := "p@ss:w0rd/special"
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed.User = url.UserPassword(parsed.User.Username(), pw)
+	result := parsed.String()
+
+	// The password should be URL-encoded in the result.
+	reparsed, err := url.Parse(result)
+	if err != nil {
+		t.Fatalf("re-parsing produced URL: %v", err)
+	}
+	gotPW, ok := reparsed.User.Password()
+	if !ok {
+		t.Fatal("password not set in reconstructed URL")
+	}
+	if gotPW != pw {
+		t.Errorf("password = %q, want %q", gotPW, pw)
+	}
+	if reparsed.User.Username() != "myuser" {
+		t.Errorf("username = %q, want %q", reparsed.User.Username(), "myuser")
+	}
+}
+
+func TestRootCmd_DatabasePasswordFile_FromEnv(t *testing.T) {
+	// When --database-url is not set but DATABASE_URL is, the password file
+	// should still work.
+	keyFile := generateTestKeyFile(t)
+	pwFile := writeSecretFile(t, "envpw\n")
+	t.Setenv("DATABASE_URL", "postgres://envuser@localhost:5432/envdb?sslmode=disable&connect_timeout=1")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-password-file", pwFile,
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", keyFile,
+		"--log-level", "error",
+	})
+
+	err := cmd.Execute()
+	// Should fail on connect, not on flag resolution.
+	if err == nil {
+		t.Fatal("expected connect error, got nil")
+	}
+	if strings.Contains(err.Error(), "database-password-file") || strings.Contains(err.Error(), "requires") {
+		t.Fatalf("expected a connect error, got a flag error: %v", err)
 	}
 }

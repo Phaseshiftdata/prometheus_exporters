@@ -28,6 +28,7 @@ import (
 	"github.com/phaseshiftdata/prometheus_exporters/internal/scheduler"
 	"github.com/phaseshiftdata/prometheus_exporters/internal/server"
 	"github.com/phaseshiftdata/prometheus_exporters/internal/store"
+	"github.com/phaseshiftdata/prometheus_exporters/src/secrets"
 	"github.com/phaseshiftdata/prometheus_exporters/src/version"
 )
 
@@ -106,6 +107,8 @@ func rootCmd() *cobra.Command {
 		tlsKeyFile           string
 		basicAuthUsername     string
 		basicAuthPassword    string
+		apiTokenFile         string
+		basicAuthPasswordFile string
 		logLevel             string
 		capabilitiesOnly     bool
 	)
@@ -117,8 +120,33 @@ func rootCmd() *cobra.Command {
 			version.Version, version.GitCommit, version.BuildDate),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Resolve file-based secrets before building the config.
+			resolvedAPIToken := resolveString(cmd, "cf.api-token", apiToken, "CF_API_TOKEN", "")
+			if apiTokenFile != "" {
+				if resolvedAPIToken != "" {
+					return fmt.Errorf("--cf.api-token and --cf.api-token-file are mutually exclusive")
+				}
+				v, err := secrets.ReadSecretFile(apiTokenFile)
+				if err != nil {
+					return fmt.Errorf("--cf.api-token-file: %w", err)
+				}
+				resolvedAPIToken = v
+			}
+
+			resolvedBasicAuthPassword := basicAuthPassword
+			if basicAuthPasswordFile != "" {
+				if resolvedBasicAuthPassword != "" {
+					return fmt.Errorf("--web.basic-auth-password and --web.basic-auth-password-file are mutually exclusive")
+				}
+				v, err := secrets.ReadSecretFile(basicAuthPasswordFile)
+				if err != nil {
+					return fmt.Errorf("--web.basic-auth-password-file: %w", err)
+				}
+				resolvedBasicAuthPassword = v
+			}
+
 			rc := runConfig{
-				APIToken:               resolveString(cmd, "cf.api-token", apiToken, "CF_API_TOKEN", ""),
+				APIToken:               resolvedAPIToken,
 				Accounts:               splitCSV(resolveString(cmd, "cf.accounts", accounts, "CF_ACCOUNTS", "")),
 				Zones:                  splitCSV(resolveString(cmd, "cf.zones", zones, "CF_ZONES", "")),
 				ZonesExclude:           splitCSV(resolveString(cmd, "cf.zones-exclude", zonesExclude, "CF_ZONES_EXCLUDE", "")),
@@ -137,7 +165,7 @@ func rootCmd() *cobra.Command {
 				TLSCertFile:            tlsCertFile,
 				TLSKeyFile:             tlsKeyFile,
 				BasicAuthUsername:       basicAuthUsername,
-				BasicAuthPassword:       basicAuthPassword,
+				BasicAuthPassword:       resolvedBasicAuthPassword,
 				LogLevel:               resolveString(cmd, "log.level", logLevel, "LOG_LEVEL", defaultLogLevel),
 				CapabilitiesOnly:       capabilitiesOnly,
 			}
@@ -146,6 +174,7 @@ func rootCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&apiToken, "cf.api-token", "", "Cloudflare scoped API token (env: CF_API_TOKEN)")
+	cmd.Flags().StringVar(&apiTokenFile, "cf.api-token-file", "", "Path to file containing Cloudflare API token")
 	cmd.Flags().StringVar(&accounts, "cf.accounts", "", "Comma-separated account IDs (env: CF_ACCOUNTS)")
 	cmd.Flags().StringVar(&zones, "cf.zones", "", "Comma-separated zone IDs to include (env: CF_ZONES)")
 	cmd.Flags().StringVar(&zonesExclude, "cf.zones-exclude", "", "Comma-separated zone IDs to exclude (env: CF_ZONES_EXCLUDE)")
@@ -173,6 +202,7 @@ func rootCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&basicAuthUsername, "web.basic-auth-username", "", "Basic auth username")
 	cmd.Flags().StringVar(&basicAuthPassword, "web.basic-auth-password", "", "Basic auth password")
+	cmd.Flags().StringVar(&basicAuthPasswordFile, "web.basic-auth-password-file", "", "Path to file containing basic auth password")
 
 	cmd.Flags().StringVar(&logLevel, "log.level", defaultLogLevel, "Log level: debug, info, warn, error (env: LOG_LEVEL)")
 
