@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 	"time"
@@ -707,5 +708,125 @@ func TestRootCmd_RunE_WithEnvVars(t *testing.T) {
 	cmd.SetArgs([]string{"--capabilities"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("rootCmd with env vars should succeed in capabilities mode: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// File-based secret flag tests
+// ---------------------------------------------------------------------------
+
+func writeSecretFile(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "secret")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestRootCmd_APITokenFile(t *testing.T) {
+	path := writeSecretFile(t, "file-token\n")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token-file", path,
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected success with --cf.api-token-file, got: %v", err)
+	}
+}
+
+func TestRootCmd_APITokenFile_MissingFile(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token-file", "/nonexistent/token",
+	})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for missing secret file")
+	}
+}
+
+func TestRootCmd_APITokenFile_EmptyFile(t *testing.T) {
+	path := writeSecretFile(t, "")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token-file", path,
+	})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for empty secret file")
+	}
+}
+
+func TestRootCmd_APITokenFile_ConflictWithFlag(t *testing.T) {
+	path := writeSecretFile(t, "file-token\n")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token", "flag-token",
+		"--cf.api-token-file", path,
+	})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error when both --cf.api-token and --cf.api-token-file are set")
+	}
+}
+
+func TestRootCmd_APITokenFile_ConflictWithEnv(t *testing.T) {
+	path := writeSecretFile(t, "file-token\n")
+	t.Setenv("CF_API_TOKEN", "env-token")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token-file", path,
+	})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error when both CF_API_TOKEN env and --cf.api-token-file are set")
+	}
+}
+
+func TestRootCmd_BasicAuthPasswordFile(t *testing.T) {
+	path := writeSecretFile(t, "secret-password\n")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token", "tok",
+		"--web.basic-auth-password-file", path,
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected success with --web.basic-auth-password-file, got: %v", err)
+	}
+}
+
+func TestRootCmd_BasicAuthPasswordFile_ConflictWithFlag(t *testing.T) {
+	path := writeSecretFile(t, "secret-password\n")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token", "tok",
+		"--web.basic-auth-password", "inline-password",
+		"--web.basic-auth-password-file", path,
+	})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error when both --web.basic-auth-password and --web.basic-auth-password-file are set")
+	}
+}
+
+func TestRootCmd_BasicAuthPasswordFile_MissingFile(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token", "tok",
+		"--web.basic-auth-password-file", "/nonexistent/password",
+	})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for missing password file")
 	}
 }
