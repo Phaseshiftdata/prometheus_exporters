@@ -191,6 +191,13 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator(".main")).toContainText("/capabilities");
   });
 
+  test("cloudflare exporter page has secret configuration section", async ({ page }) => {
+    await page.goto("/#/cloudflare-exporter");
+    await expect(page.locator(".main")).toContainText("Secret Configuration");
+    await expect(page.locator(".main")).toContainText("api-token-file");
+    await expect(page.locator(".main")).toContainText("openbao");
+  });
+
   test("cloudflare exporter page has self-instrumentation metrics", async ({ page }) => {
     await page.goto("/#/cloudflare-exporter");
     await expect(page.locator(".main")).toContainText("cloudflare_exporter_build_info");
