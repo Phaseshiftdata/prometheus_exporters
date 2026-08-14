@@ -819,6 +819,106 @@ func TestRootCmd_BasicAuthPasswordFile_ConflictWithFlag(t *testing.T) {
 	}
 }
 
+func TestBuildSlogLogger(t *testing.T) {
+	for _, level := range []string{"debug", "info", "warn", "error", "unknown"} {
+		l := buildSlogLogger(level)
+		if l == nil {
+			t.Fatalf("expected non-nil logger for level %q", level)
+		}
+	}
+}
+
+func TestRootCmd_APITokenOpenBao(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login" && r.Method == "POST":
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.test-token",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/v1/secret/data/cf" && r.Method == "GET":
+			resp := map[string]interface{}{
+				"data": map[string]interface{}{
+					"data": map[string]interface{}{
+						"api_token": "vault-cf-token",
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	roleIDFile := writeSecretFile(t, "role-id\n")
+	secretIDFile := writeSecretFile(t, "secret-id\n")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token-openbao", "secret/cf:api_token",
+		"--openbao-address", srv.URL,
+		"--openbao-approle-role-id-file", roleIDFile,
+		"--openbao-approle-secret-id-file", secretIDFile,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected success with --cf.api-token-openbao, got: %v", err)
+	}
+}
+
+func TestRootCmd_APITokenOpenBao_BadRef(t *testing.T) {
+	// Bad ref format triggers ParseOpenBaoRef error before the OpenBao client is created.
+	// We still need a valid init to get past NewOpenBaoClient.
+	// Use the init failure path instead to avoid default registerer conflicts.
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token-openbao", "bad-ref-no-colon",
+		"--openbao-address", "",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestRootCmd_APITokenOpenBao_InitFails(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token-openbao", "secret/cf:api_token",
+		"--openbao-address", "",
+		"--openbao-approle-role-id-file", "/nonexistent/role",
+		"--openbao-approle-secret-id-file", "/nonexistent/secret",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when OpenBao client initialization fails")
+	}
+}
+
+func TestRootCmd_APITokenOpenBao_ConflictWithFlag(t *testing.T) {
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token", "flag-token",
+		"--cf.api-token-openbao", "secret/cf:api_token",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when both --cf.api-token and --cf.api-token-openbao are set")
+	}
+}
+
 func TestRootCmd_BasicAuthPasswordFile_MissingFile(t *testing.T) {
 	cmd := rootCmd()
 	cmd.SetArgs([]string{

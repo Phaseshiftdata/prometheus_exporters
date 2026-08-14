@@ -452,6 +452,645 @@ func TestMutualExclusivity(t *testing.T) {
 	}
 }
 
+func TestReadSecretPermissionDenied(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login":
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.tok",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/v1/secret/data/myapp":
+			http.Error(w, `{"errors":["permission denied"]}`, http.StatusForbidden)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	_, err = client.ReadSecret("secret/myapp", "key")
+	if err == nil {
+		t.Fatal("expected error for permission denied")
+	}
+	if got := fmt.Sprint(err); !contains(got, "permission denied") {
+		t.Errorf("error %q should mention 'permission denied'", got)
+	}
+}
+
+func TestReadSecretUnauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login":
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.tok",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/v1/secret/data/myapp":
+			http.Error(w, `{"errors":["unauthorized"]}`, http.StatusUnauthorized)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	_, err = client.ReadSecret("secret/myapp", "key")
+	if err == nil {
+		t.Fatal("expected error for unauthorized")
+	}
+}
+
+func TestReadSecretUnexpectedStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login":
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.tok",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/v1/secret/data/myapp":
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	_, err = client.ReadSecret("secret/myapp", "key")
+	if err == nil {
+		t.Fatal("expected error for unexpected status")
+	}
+	if got := fmt.Sprint(err); !contains(got, "unexpected status") {
+		t.Errorf("error %q should mention 'unexpected status'", got)
+	}
+}
+
+func TestReadSecretBadGateway(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login":
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.tok",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/v1/secret/data/myapp":
+			http.Error(w, "bad gateway", http.StatusBadGateway)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	_, err = client.ReadSecret("secret/myapp", "key")
+	if err == nil {
+		t.Fatal("expected error for bad gateway")
+	}
+}
+
+func TestReadSecretParseError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login":
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.tok",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/v1/secret/data/myapp":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("this is not valid json"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	_, err = client.ReadSecret("secret/myapp", "key")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON response")
+	}
+	if got := fmt.Sprint(err); !contains(got, "parsing response") {
+		t.Errorf("error %q should mention 'parsing response'", got)
+	}
+}
+
+func TestReadSecretFieldNotString(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login":
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.tok",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/v1/secret/data/myapp":
+			resp := map[string]interface{}{
+				"data": map[string]interface{}{
+					"data": map[string]interface{}{
+						"numeric_field": 42,
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	_, err = client.ReadSecret("secret/myapp", "numeric_field")
+	if err == nil {
+		t.Fatal("expected error for non-string field")
+	}
+	if got := fmt.Sprint(err); !contains(got, "not a string") {
+		t.Errorf("error %q should mention 'not a string'", got)
+	}
+}
+
+func TestReadSecretConnectionError(t *testing.T) {
+	// Create a server and close it immediately to get a connection error.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/auth/approle/login" {
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.tok",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	// Close server before read to cause connection error.
+	srv.Close()
+
+	_, err = client.ReadSecret("secret/myapp", "key")
+	if err == nil {
+		t.Fatal("expected connection error")
+	}
+}
+
+func TestLoginFailedStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"errors":["invalid credentials"]}`, http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	// Should have an empty token because login failed.
+	client.mu.RLock()
+	tok := client.token
+	client.mu.RUnlock()
+	if tok != "" {
+		t.Error("expected empty token after failed login")
+	}
+}
+
+func TestLoginEmptyToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]interface{}{
+			"auth": map[string]interface{}{
+				"client_token":   "",
+				"lease_duration": 3600,
+				"renewable":      true,
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	client.mu.RLock()
+	tok := client.token
+	client.mu.RUnlock()
+	if tok != "" {
+		t.Error("expected empty token when server returns empty client_token")
+	}
+}
+
+func TestLoginBadJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	client.mu.RLock()
+	tok := client.token
+	client.mu.RUnlock()
+	if tok != "" {
+		t.Error("expected empty token when server returns invalid JSON")
+	}
+}
+
+func TestLoginMissingRoleIDFile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	_, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   "/nonexistent/role_id",
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	client.mu.RLock()
+	tok := client.token
+	client.mu.RUnlock()
+	if tok != "" {
+		t.Error("expected empty token when role_id file is missing")
+	}
+}
+
+func TestLoginMissingSecretIDFile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	roleIDFile, _ := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: "/nonexistent/secret_id",
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	client.mu.RLock()
+	tok := client.token
+	client.mu.RUnlock()
+	if tok != "" {
+		t.Error("expected empty token when secret_id file is missing")
+	}
+}
+
+func TestRenewTokenNoToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	// Token is empty because login failed; renewToken should return error.
+	err = client.renewToken()
+	if err == nil {
+		t.Fatal("expected error when renewing with no token")
+	}
+	if got := fmt.Sprint(err); !contains(got, "no token") {
+		t.Errorf("error %q should mention 'no token'", got)
+	}
+}
+
+func TestRenewTokenFailedStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login":
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.tok",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/v1/auth/token/renew-self":
+			http.Error(w, `{"errors":["forbidden"]}`, http.StatusForbidden)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	err = client.renewToken()
+	if err == nil {
+		t.Fatal("expected error for failed renewal")
+	}
+	if got := fmt.Sprint(err); !contains(got, "token renewal failed") {
+		t.Errorf("error %q should mention 'token renewal failed'", got)
+	}
+}
+
+func TestRenewTokenBadJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login":
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.tok",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/v1/auth/token/renew-self":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("not json"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	err = client.renewToken()
+	if err == nil {
+		t.Fatal("expected error for bad JSON renew response")
+	}
+	if got := fmt.Sprint(err); !contains(got, "parsing renew response") {
+		t.Errorf("error %q should mention 'parsing renew response'", got)
+	}
+}
+
+func TestRenewTokenConnectionError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/auth/approle/login" {
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.tok",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	// Close server to cause connection error on renewal.
+	srv.Close()
+
+	err = client.renewToken()
+	if err == nil {
+		t.Fatal("expected connection error on renewal")
+	}
+}
+
+func TestRenewLoopRenewalFailReloginFail(t *testing.T) {
+	// Test the path where renewal fails AND re-login also fails,
+	// causing the token to be cleared and authenticated set to 0.
+	var loginCount int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login":
+			loginCount++
+			if loginCount <= 1 {
+				// First login succeeds.
+				resp := map[string]interface{}{
+					"auth": map[string]interface{}{
+						"client_token":   "s.initial",
+						"lease_duration": 2,
+						"renewable":      true,
+					},
+				}
+				json.NewEncoder(w).Encode(resp)
+			} else {
+				// Subsequent logins fail.
+				http.Error(w, "login failed", http.StatusForbidden)
+			}
+		case r.URL.Path == "/v1/auth/token/renew-self":
+			// Renewal always fails.
+			http.Error(w, "renewal failed", http.StatusForbidden)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, prometheus.NewRegistry(), newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for the renewLoop to attempt renewal and re-login.
+	// TTL is 2s, minimum backoff is 5s, so first renewal attempt is at ~5s.
+	time.Sleep(7 * time.Second)
+	client.Close()
+
+	client.mu.RLock()
+	tok := client.token
+	client.mu.RUnlock()
+
+	if tok != "" {
+		t.Errorf("expected token to be cleared after failed renewal and re-login, got %q", tok)
+	}
+}
+
+func TestNewOpenBaoClientNilRegisterer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]interface{}{
+			"auth": map[string]interface{}{
+				"client_token":   "s.tok",
+				"lease_duration": 3600,
+				"renewable":      true,
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	roleIDFile, secretIDFile := writeSecretFiles(t)
+	// Pass nil registerer - should not panic.
+	client, err := NewOpenBaoClient(OpenBaoConfig{
+		Address:      srv.URL,
+		RoleIDFile:   roleIDFile,
+		SecretIDFile: secretIDFile,
+	}, nil, newTestLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+}
+
 func TestReadSecretSealedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -872,6 +874,154 @@ func TestRootCmd_DatabasePasswordFile_URLSubstitution(t *testing.T) {
 	}
 	if reparsed.User.Username() != "myuser" {
 		t.Errorf("username = %q, want %q", reparsed.User.Username(), "myuser")
+	}
+}
+
+func TestRootCmd_DatabasePasswordOpenBao(t *testing.T) {
+	// Set up a mock Vault server that handles AppRole login and KV read.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/approle/login" && r.Method == "POST":
+			resp := map[string]interface{}{
+				"auth": map[string]interface{}{
+					"client_token":   "s.test-token",
+					"lease_duration": 3600,
+					"renewable":      true,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/v1/secret/data/db" && r.Method == "GET":
+			resp := map[string]interface{}{
+				"data": map[string]interface{}{
+					"data": map[string]interface{}{
+						"password": "vault-db-pw",
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	keyFile := generateTestKeyFile(t)
+	roleIDFile := writeSecretFile(t, "role-id\n")
+	secretIDFile := writeSecretFile(t, "secret-id\n")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-url", "postgres://myuser@localhost:5432/mydb?sslmode=disable&connect_timeout=1",
+		"--database-password-openbao", "secret/db:password",
+		"--openbao-address", srv.URL,
+		"--openbao-approle-role-id-file", roleIDFile,
+		"--openbao-approle-secret-id-file", secretIDFile,
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", keyFile,
+		"--log-level", "error",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected connect error, got nil")
+	}
+	// Should fail on database connect, not on flag resolution.
+	if strings.Contains(err.Error(), "openbao") {
+		t.Fatalf("expected a connect error, got an OpenBao error: %v", err)
+	}
+}
+
+func TestRootCmd_DatabasePasswordOpenBao_NoDatabaseURL(t *testing.T) {
+	os.Unsetenv("DATABASE_URL")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-password-openbao", "secret/db:password",
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", "/nonexistent/key.pem",
+		"--log-level", "error",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when --database-password-openbao is set without --database-url")
+	}
+	if !strings.Contains(err.Error(), "requires --database-url") {
+		t.Fatalf("expected missing URL error, got: %v", err)
+	}
+}
+
+func TestRootCmd_DatabasePasswordOpenBao_ConflictWithFile(t *testing.T) {
+	pwFile := writeSecretFile(t, "file-pw\n")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-url", "postgres://user@localhost/db",
+		"--database-password-file", pwFile,
+		"--database-password-openbao", "secret/db:password",
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", "/nonexistent/key.pem",
+		"--log-level", "error",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when both file and openbao are set")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("expected mutually exclusive error, got: %v", err)
+	}
+}
+
+func TestRootCmd_DatabasePasswordOpenBao_InitFails(t *testing.T) {
+	// Test the path where OpenBao client initialization fails (empty address).
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-url", "postgres://user@localhost/db",
+		"--database-password-openbao", "secret/db:password",
+		"--openbao-address", "",
+		"--openbao-approle-role-id-file", "/nonexistent/role",
+		"--openbao-approle-secret-id-file", "/nonexistent/secret",
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", "/nonexistent/key.pem",
+		"--log-level", "error",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when OpenBao client init fails")
+	}
+	if !strings.Contains(err.Error(), "initializing OpenBao client") {
+		t.Fatalf("expected OpenBao init error, got: %v", err)
+	}
+}
+
+func TestRootCmd_DatabasePasswordOpenBao_DatabaseURLFromEnv(t *testing.T) {
+	// Test using DATABASE_URL env when --database-url is not set.
+	t.Setenv("DATABASE_URL", "postgres://user@localhost:5432/db?sslmode=disable&connect_timeout=1")
+	os.Unsetenv("OPENBAO_ADDR")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-password-openbao", "secret/db:password",
+		"--openbao-address", "",
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", "/nonexistent/key.pem",
+		"--log-level", "error",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	// Should fail on OpenBao init (empty address), not on "requires --database-url".
+	if strings.Contains(err.Error(), "requires --database-url") {
+		t.Fatalf("DATABASE_URL env should have been picked up, got: %v", err)
 	}
 }
 
