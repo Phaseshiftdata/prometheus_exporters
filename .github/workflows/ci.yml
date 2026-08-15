@@ -36,6 +36,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+      - name: Install C dependencies (libvirt for CGO)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libvirt-dev
       - name: Go vet
         run: go vet ./...
       - name: Install staticcheck
@@ -71,6 +73,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+      - name: Install C dependencies (libvirt for CGO)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libvirt-dev
       - name: Run tests with coverage
         run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
       - name: Check coverage threshold
@@ -100,6 +104,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+      - name: Install C dependencies (libvirt for CGO)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libvirt-dev
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
