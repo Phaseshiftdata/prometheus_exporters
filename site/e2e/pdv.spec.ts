@@ -158,7 +158,7 @@ test.describe("post-deployment verification", () => {
     await page.goto("/#/network-exporter");
     await expect(page.locator(".main")).toContainText("Network Exporter");
     await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/network_exporter");
-    await expect(page.locator("pre code")).toBeVisible();
+    await expect(page.locator("pre code").first()).toBeVisible();
   });
 
   test("network exporter page has configuration documentation", async ({ page }) => {
@@ -218,7 +218,7 @@ test.describe("post-deployment verification", () => {
     await page.goto("/#/ipsec-exporter");
     await expect(page.locator(".main")).toContainText("IPsec Exporter");
     await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/ipsec_exporter");
-    await expect(page.locator("pre code")).toBeVisible();
+    await expect(page.locator("pre code").first()).toBeVisible();
   });
 
   test("ipsec exporter page has VICI socket documentation", async ({ page }) => {
@@ -340,7 +340,7 @@ test.describe("post-deployment verification", () => {
     await page.goto("/#/github-exporter");
     await expect(page.locator(".main")).toContainText("GitHub Exporter");
     await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/github_exporter");
-    await expect(page.locator("pre code")).toBeVisible();
+    await expect(page.locator("pre code").first()).toBeVisible();
   });
 
   test("github exporter page has configuration documentation", async ({ page }) => {
