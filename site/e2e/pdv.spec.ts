@@ -7,6 +7,9 @@ import { test, expect } from "@playwright/test";
  */
 
 test.describe("post-deployment verification", () => {
+  // Some tests only work at root level, not /staging/ subdirectory.
+  const isStaging = (process.env.SITE_URL || "").includes("/staging");
+
   test("site is reachable and returns 200", async ({ request }) => {
     const response = await request.get("./");
     expect(response.status()).toBe(200);
@@ -98,14 +101,17 @@ test.describe("post-deployment verification", () => {
     expect(body).toContain("prometheus_exporters.phaseshiftdata.com");
   });
 
-  test("CNAME file is served", async ({ request }) => {
+  // CNAME only exists at root level, not in /staging/ subdirectory.
+  (isStaging ? test.skip : test)("CNAME file is served", async ({ request }) => {
     const response = await request.get("./CNAME");
     expect(response.status()).toBe(200);
     const body = await response.text();
     expect(body.trim()).toBe("prometheus_exporters.phaseshiftdata.com");
   });
 
-  test("404 page redirects to root", async ({ page }) => {
+  // 404 redirect only works at root level (GitHub Pages 404.html);
+  // skip when running against /staging/ subdirectory.
+  (isStaging ? test.skip : test)("404 page redirects to root", async ({ page }) => {
     await page.goto("/nonexistent-page");
     await expect(page.locator(".nav-brand")).toBeVisible();
   });
