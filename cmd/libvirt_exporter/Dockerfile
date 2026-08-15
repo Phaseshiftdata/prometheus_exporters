@@ -1,16 +1,14 @@
-# Build stage — Ubuntu 24.04 for libvirt-dev (CGO required)
-FROM ubuntu:24.04 AS build
+# Build stage — Ubuntu for libvirt-dev (CGO required)
+FROM ubuntu:26.04 AS build
 
 ARG VERSION=dev
 ARG COMMIT=unknown
 
-# Install build dependencies including libvirt-dev for CGO bindings.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates curl gcc libc6-dev pkg-config libvirt-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Go 1.26 from the upstream tarball.
 ARG GO_VERSION=1.26.6
 RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
         -o /tmp/go.tar.gz && \
@@ -21,31 +19,39 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 
 WORKDIR /src
 
-# Cache module downloads before copying the full source tree.
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
-# Build with CGO enabled (required by libvirt Go bindings).
 RUN CGO_ENABLED=1 go build \
     -trimpath \
     -ldflags "-s -w \
         -X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} \
-        -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT} \
-        -X github.com/phaseshiftdata/prometheus_exporters/src/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
     -o /libvirt_exporter \
     ./cmd/libvirt_exporter/
 
-# Runtime stage — Ubuntu 24.04 with only the libvirt client library.
-# Cannot use distroless because the binary requires CGO and libvirt shared libs.
-FROM ubuntu:24.04
+# Collect runtime dependencies into a minimal root filesystem.
+RUN mkdir -p /runtime/lib/x86_64-linux-gnu /runtime/lib64 /runtime/etc/ssl/certs /runtime/usr/lib/x86_64-linux-gnu && \
+    cp /etc/ssl/certs/ca-certificates.crt /runtime/etc/ssl/certs/ && \
+    cp /lib64/ld-linux-x86-64.so.2 /runtime/lib64/ && \
+    cp /lib/x86_64-linux-gnu/libc.so.6 /runtime/lib/x86_64-linux-gnu/ && \
+    cp /lib/x86_64-linux-gnu/libm.so.6 /runtime/lib/x86_64-linux-gnu/ && \
+    cp /lib/x86_64-linux-gnu/libpthread.so.0 /runtime/lib/x86_64-linux-gnu/ 2>/dev/null || true && \
+    cp /lib/x86_64-linux-gnu/libdl.so.2 /runtime/lib/x86_64-linux-gnu/ 2>/dev/null || true && \
+    for lib in $(ldd /libvirt_exporter | grep -oP '/\S+'); do \
+        dir=$(dirname "$lib"); \
+        mkdir -p "/runtime$dir"; \
+        cp "$lib" "/runtime$lib" 2>/dev/null || true; \
+    done && \
+    echo "nonroot:x:65532:65532:nonroot:/:/sbin/nologin" > /runtime/etc/passwd && \
+    echo "nonroot:x:65532:" > /runtime/etc/group
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends libvirt0 ca-certificates && \
-    rm -rf /var/lib/apt/lists/* && \
-    useradd -r -s /usr/sbin/nologin -u 65532 exporter
+# Runtime stage — scratch with only the binary, libs, and CA certs.
+FROM scratch
 
+COPY --from=build /runtime/ /
 COPY --from=build /libvirt_exporter /libvirt_exporter
 
 EXPOSE 9177
