@@ -3,6 +3,7 @@ export function HomePage(): string {
     ["network_exporter", "Network connectivity and performance metrics", "9101"],
     ["ipsec_exporter", "IPsec tunnel status and traffic metrics", "9102"],
     ["cloudflare_exporter", "Cloudflare analytics, Zero Trust, DNS, and certificate metrics", "9199"],
+    ["libvirt_exporter", "Libvirt/KVM virtual machine and hypervisor metrics", "9177"],
   ];
 
   const exporterRows = exporters

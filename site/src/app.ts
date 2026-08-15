@@ -3,6 +3,7 @@ import { NetworkExporterPage } from "./pages/network-exporter.js";
 import { IpsecExporterPage } from "./pages/ipsec-exporter.js";
 import { CloudflareExporterPage } from "./pages/cloudflare-exporter.js";
 import { GitHubExporterPage } from "./pages/github-exporter.js";
+import { LibvirtExporterPage } from "./pages/libvirt-exporter.js";
 
 declare const __APP_VERSION__: string;
 const VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
@@ -15,6 +16,7 @@ ROUTES["/network-exporter"] = NetworkExporterPage;
 ROUTES["/ipsec-exporter"] = IpsecExporterPage;
 ROUTES["/cloudflare-exporter"] = CloudflareExporterPage;
 ROUTES["/github-exporter"] = GitHubExporterPage;
+ROUTES["/libvirt-exporter"] = LibvirtExporterPage;
 
 function getPath(): string {
   const hash = window.location.hash.replace(/^#\/?/, "/");
@@ -28,6 +30,7 @@ function renderNav(currentPath: string): string {
     { to: "/ipsec-exporter", label: "IPsec" },
     { to: "/cloudflare-exporter", label: "Cloudflare" },
     { to: "/github-exporter", label: "GitHub" },
+    { to: "/libvirt-exporter", label: "Libvirt" },
   ];
 
   const navLinks = links
@@ -80,6 +83,7 @@ function updateHead(path: string): void {
   titles["/ipsec-exporter"] = "IPsec Exporter \u2014 Prometheus Exporters";
   titles["/cloudflare-exporter"] = "Cloudflare Exporter \u2014 Prometheus Exporters";
   titles["/github-exporter"] = "GitHub Exporter \u2014 Prometheus Exporters";
+  titles["/libvirt-exporter"] = "Libvirt Exporter \u2014 Prometheus Exporters";
 
   document.title = path in titles ? titles[path] : titles["/"];
 
