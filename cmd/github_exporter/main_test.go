@@ -506,11 +506,11 @@ func TestRunWithDatabase(t *testing.T) {
 	// Integration test: run with a real PostgreSQL database.
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://postgres:test@172.17.0.31:5432/testdb?sslmode=disable&connect_timeout=2"
+		dsn = "postgres://postgres:test@127.0.0.1:5432/testdb?sslmode=disable&connect_timeout=2"
 	}
 
 	// Quick check if DB is reachable.
-	conn, dialErr := net.DialTimeout("tcp", "172.17.0.31:5432", 2*time.Second)
+	conn, dialErr := net.DialTimeout("tcp", "127.0.0.1:5432", 2*time.Second)
 	if dialErr != nil {
 		t.Skipf("skipping integration test, PostgreSQL not reachable: %v", dialErr)
 	}

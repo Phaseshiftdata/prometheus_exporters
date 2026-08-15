@@ -120,9 +120,9 @@ func TestE2EIpsecExporterMetrics(t *testing.T) {
 
 	// Verify specific label values are present.
 	labelChecks := []string{
-		`name="stella-cotulla"`,        // IKE SA name
+		`name="site-alpha"`,        // IKE SA name
 		`remote_host="1.2.3.4"`,        // peer IP
-		`local_ts="107.155.97.82/32"`,  // traffic selector
+		`local_ts="203.0.113.10/32"`,  // traffic selector
 		`remote_ts="10.10.10.0/24"`,    // remote subnet
 		`priority="critical"`,          // queue priority
 	}
@@ -232,7 +232,7 @@ func (m *mockVICIClient) IsAvailable() bool { return true }
 func (m *mockVICIClient) ListSAs() ([]ipsec.IKESAInfo, error) {
 	return []ipsec.IKESAInfo{
 		{
-			Name:            "stella-cotulla",
+			Name:            "site-alpha",
 			UID:             "1",
 			RemoteHost:      "1.2.3.4",
 			State:           2, // ESTABLISHED
@@ -242,7 +242,7 @@ func (m *mockVICIClient) ListSAs() ([]ipsec.IKESAInfo, error) {
 					Name:          "net",
 					UID:           "2",
 					State:         3, // INSTALLED
-					LocalTS:       "107.155.97.82/32",
+					LocalTS:       "203.0.113.10/32",
 					RemoteTS:      "10.10.10.0/24",
 					BytesIn:       482910234,
 					BytesOut:      129301022,
@@ -331,7 +331,7 @@ func (m *mockVICIClientTunnelDown) IsAvailable() bool { return true }
 func (m *mockVICIClientTunnelDown) ListSAs() ([]ipsec.IKESAInfo, error) {
 	return []ipsec.IKESAInfo{
 		{
-			Name:            "stella-cotulla",
+			Name:            "site-alpha",
 			UID:             "1",
 			RemoteHost:      "1.2.3.4",
 			State:           0, // CREATED — tunnel configured but not established
@@ -363,7 +363,7 @@ func TestE2ETunnelDown(t *testing.T) {
 	}
 
 	// IKE SA state should be 0 (CREATED).
-	expected := `ipsec_ike_sa_state{name="stella-cotulla",remote_host="1.2.3.4",uid="1"} 0`
+	expected := `ipsec_ike_sa_state{name="site-alpha",remote_host="1.2.3.4",uid="1"} 0`
 	if !strings.Contains(metrics, expected) {
 		t.Errorf("expected IKE SA state 0, not found in metrics.\nLooking for: %s", expected)
 	}
@@ -396,7 +396,7 @@ func (m *mockVICIClientTunnelFlap) ListSAs() ([]ipsec.IKESAInfo, error) {
 	// This is what happens during a rekey/flap.
 	return []ipsec.IKESAInfo{
 		{
-			Name:            "stella-cotulla",
+			Name:            "site-alpha",
 			UID:             "42",
 			RemoteHost:      "1.2.3.4",
 			State:           5, // REKEYED — old SA
@@ -404,7 +404,7 @@ func (m *mockVICIClientTunnelFlap) ListSAs() ([]ipsec.IKESAInfo, error) {
 			ChildSAs: []ipsec.ChildSAInfo{
 				{
 					Name: "net", UID: "100", State: 6, // REKEYED
-					LocalTS: "107.155.97.82/32", RemoteTS: "10.10.10.0/24",
+					LocalTS: "203.0.113.10/32", RemoteTS: "10.10.10.0/24",
 					BytesIn: 1000000, BytesOut: 500000,
 					PacketsIn: 10000, PacketsOut: 5000,
 					InstalledSecs: 86000,
@@ -412,7 +412,7 @@ func (m *mockVICIClientTunnelFlap) ListSAs() ([]ipsec.IKESAInfo, error) {
 			},
 		},
 		{
-			Name:            "stella-cotulla",
+			Name:            "site-alpha",
 			UID:             "43",
 			RemoteHost:      "1.2.3.4",
 			State:           2, // ESTABLISHED — new SA
@@ -420,7 +420,7 @@ func (m *mockVICIClientTunnelFlap) ListSAs() ([]ipsec.IKESAInfo, error) {
 			ChildSAs: []ipsec.ChildSAInfo{
 				{
 					Name: "net", UID: "101", State: 3, // INSTALLED
-					LocalTS: "107.155.97.82/32", RemoteTS: "10.10.10.0/24",
+					LocalTS: "203.0.113.10/32", RemoteTS: "10.10.10.0/24",
 					BytesIn: 1024, BytesOut: 512,
 					PacketsIn: 10, PacketsOut: 5,
 					InstalledSecs: 25,
@@ -448,8 +448,8 @@ func TestE2ETunnelFlap(t *testing.T) {
 	metrics := scrapeMetrics(t, addr)
 
 	// Both IKE SAs should appear with distinct UIDs.
-	oldSA := `ipsec_ike_sa_state{name="stella-cotulla",remote_host="1.2.3.4",uid="42"} 5`
-	newSA := `ipsec_ike_sa_state{name="stella-cotulla",remote_host="1.2.3.4",uid="43"} 2`
+	oldSA := `ipsec_ike_sa_state{name="site-alpha",remote_host="1.2.3.4",uid="42"} 5`
+	newSA := `ipsec_ike_sa_state{name="site-alpha",remote_host="1.2.3.4",uid="43"} 2`
 	if !strings.Contains(metrics, oldSA) {
 		t.Errorf("old SA (uid=42, state=5) not found in metrics")
 	}
@@ -463,8 +463,8 @@ func TestE2ETunnelFlap(t *testing.T) {
 	}
 
 	// Both child SAs should have byte counters.
-	oldChildBytes := `ipsec_child_sa_bytes_in{ike_sa_name="stella-cotulla",local_ts="107.155.97.82/32",name="net",remote_host="1.2.3.4",remote_ts="10.10.10.0/24",uid="100"} 1e+06`
-	newChildBytes := `ipsec_child_sa_bytes_in{ike_sa_name="stella-cotulla",local_ts="107.155.97.82/32",name="net",remote_host="1.2.3.4",remote_ts="10.10.10.0/24",uid="101"} 1024`
+	oldChildBytes := `ipsec_child_sa_bytes_in{ike_sa_name="site-alpha",local_ts="203.0.113.10/32",name="net",remote_host="1.2.3.4",remote_ts="10.10.10.0/24",uid="100"} 1e+06`
+	newChildBytes := `ipsec_child_sa_bytes_in{ike_sa_name="site-alpha",local_ts="203.0.113.10/32",name="net",remote_host="1.2.3.4",remote_ts="10.10.10.0/24",uid="101"} 1024`
 
 	if !strings.Contains(metrics, `uid="100"`) {
 		t.Error("old child SA (uid=100) not found in metrics")
@@ -493,10 +493,10 @@ func TestE2ETunnelFlap(t *testing.T) {
 	}
 
 	// Both child SA states: old=6 (REKEYED), new=3 (INSTALLED).
-	if !strings.Contains(metrics, `ipsec_child_sa_state{ike_sa_name="stella-cotulla",local_ts="107.155.97.82/32",name="net",remote_host="1.2.3.4",remote_ts="10.10.10.0/24",uid="100"} 6`) {
+	if !strings.Contains(metrics, `ipsec_child_sa_state{ike_sa_name="site-alpha",local_ts="203.0.113.10/32",name="net",remote_host="1.2.3.4",remote_ts="10.10.10.0/24",uid="100"} 6`) {
 		t.Error("old child SA state (6=REKEYED) not found")
 	}
-	if !strings.Contains(metrics, `ipsec_child_sa_state{ike_sa_name="stella-cotulla",local_ts="107.155.97.82/32",name="net",remote_host="1.2.3.4",remote_ts="10.10.10.0/24",uid="101"} 3`) {
+	if !strings.Contains(metrics, `ipsec_child_sa_state{ike_sa_name="site-alpha",local_ts="203.0.113.10/32",name="net",remote_host="1.2.3.4",remote_ts="10.10.10.0/24",uid="101"} 3`) {
 		t.Error("new child SA state (3=INSTALLED) not found")
 	}
 }
@@ -510,12 +510,12 @@ func (m *mockVICIClientPartialFailure) IsAvailable() bool { return true }
 func (m *mockVICIClientPartialFailure) ListSAs() ([]ipsec.IKESAInfo, error) {
 	return []ipsec.IKESAInfo{
 		{
-			Name: "stella-cotulla", UID: "1", RemoteHost: "1.2.3.4",
+			Name: "site-alpha", UID: "1", RemoteHost: "1.2.3.4",
 			State: 2, EstablishedSecs: 86400,
 			ChildSAs: []ipsec.ChildSAInfo{
 				{
 					Name: "net", UID: "2", State: 3,
-					LocalTS: "107.155.97.82/32", RemoteTS: "10.10.10.0/24",
+					LocalTS: "203.0.113.10/32", RemoteTS: "10.10.10.0/24",
 					BytesIn: 100, BytesOut: 200, PacketsIn: 1, PacketsOut: 2,
 					InstalledSecs: 1000,
 				},
@@ -575,7 +575,7 @@ func TestE2EPartialFailure(t *testing.T) {
 	}
 
 	// SA metrics should be present.
-	if !strings.Contains(metrics, `ipsec_ike_sa_state{name="stella-cotulla"`) {
+	if !strings.Contains(metrics, `ipsec_ike_sa_state{name="site-alpha"`) {
 		t.Error("expected IKE SA state metric to be present")
 	}
 	if !strings.Contains(metrics, `ipsec_child_sa_bytes_in{`) {
@@ -668,7 +668,7 @@ func (m *mockVICIClientConnecting) IsAvailable() bool { return true }
 func (m *mockVICIClientConnecting) ListSAs() ([]ipsec.IKESAInfo, error) {
 	return []ipsec.IKESAInfo{
 		{
-			Name:            "stella-cotulla",
+			Name:            "site-alpha",
 			UID:             "5",
 			RemoteHost:      "1.2.3.4",
 			State:           1, // CONNECTING
@@ -676,7 +676,7 @@ func (m *mockVICIClientConnecting) ListSAs() ([]ipsec.IKESAInfo, error) {
 			ChildSAs: []ipsec.ChildSAInfo{
 				{
 					Name: "net", UID: "6", State: 0, // CREATED
-					LocalTS: "107.155.97.82/32", RemoteTS: "10.10.10.0/24",
+					LocalTS: "203.0.113.10/32", RemoteTS: "10.10.10.0/24",
 					BytesIn: 0, BytesOut: 0, PacketsIn: 0, PacketsOut: 0,
 					InstalledSecs: 0,
 				},
@@ -702,7 +702,7 @@ func TestE2ETunnelDownConnecting(t *testing.T) {
 	metrics := scrapeMetrics(t, addr)
 
 	// IKE SA state should be 1 (CONNECTING).
-	if !strings.Contains(metrics, `ipsec_ike_sa_state{name="stella-cotulla",remote_host="1.2.3.4",uid="5"} 1`) {
+	if !strings.Contains(metrics, `ipsec_ike_sa_state{name="site-alpha",remote_host="1.2.3.4",uid="5"} 1`) {
 		t.Error("expected IKE SA state 1 (CONNECTING)")
 	}
 
@@ -771,10 +771,10 @@ func TestE2ENewTunnelAppears(t *testing.T) {
 			// First scrape: one tunnel
 			{
 				{
-					Name: "stella-cotulla", UID: "1", RemoteHost: "1.2.3.4",
+					Name: "site-alpha", UID: "1", RemoteHost: "1.2.3.4",
 					State: 2, EstablishedSecs: 86400,
 					ChildSAs: []ipsec.ChildSAInfo{
-						{Name: "net", UID: "10", State: 3, LocalTS: "107.155.97.82/32", RemoteTS: "10.10.10.0/24",
+						{Name: "net", UID: "10", State: 3, LocalTS: "203.0.113.10/32", RemoteTS: "10.10.10.0/24",
 							BytesIn: 1000, BytesOut: 500, PacketsIn: 100, PacketsOut: 50, InstalledSecs: 3600},
 					},
 				},
@@ -782,18 +782,18 @@ func TestE2ENewTunnelAppears(t *testing.T) {
 			// Second scrape: two tunnels (new one appeared)
 			{
 				{
-					Name: "stella-cotulla", UID: "1", RemoteHost: "1.2.3.4",
+					Name: "site-alpha", UID: "1", RemoteHost: "1.2.3.4",
 					State: 2, EstablishedSecs: 86430,
 					ChildSAs: []ipsec.ChildSAInfo{
-						{Name: "net", UID: "10", State: 3, LocalTS: "107.155.97.82/32", RemoteTS: "10.10.10.0/24",
+						{Name: "net", UID: "10", State: 3, LocalTS: "203.0.113.10/32", RemoteTS: "10.10.10.0/24",
 							BytesIn: 2000, BytesOut: 1000, PacketsIn: 200, PacketsOut: 100, InstalledSecs: 3630},
 					},
 				},
 				{
-					Name: "stella-elmst", UID: "2", RemoteHost: "5.6.7.8",
+					Name: "site-bravo", UID: "2", RemoteHost: "5.6.7.8",
 					State: 2, EstablishedSecs: 30,
 					ChildSAs: []ipsec.ChildSAInfo{
-						{Name: "net", UID: "20", State: 3, LocalTS: "107.155.97.82/32", RemoteTS: "10.20.20.0/24",
+						{Name: "net", UID: "20", State: 3, LocalTS: "203.0.113.10/32", RemoteTS: "10.20.20.0/24",
 							BytesIn: 512, BytesOut: 256, PacketsIn: 10, PacketsOut: 5, InstalledSecs: 25},
 					},
 				},
@@ -803,13 +803,13 @@ func TestE2ENewTunnelAppears(t *testing.T) {
 	addr, cancel := startE2EServer(t, client)
 	defer cancel()
 
-	// First scrape: only stella-cotulla should be present.
+	// First scrape: only site-alpha should be present.
 	metrics1 := scrapeMetrics(t, addr)
-	if !strings.Contains(metrics1, `name="stella-cotulla"`) {
-		t.Error("first scrape: expected stella-cotulla")
+	if !strings.Contains(metrics1, `name="site-alpha"`) {
+		t.Error("first scrape: expected site-alpha")
 	}
-	if strings.Contains(metrics1, `name="stella-elmst"`) {
-		t.Error("first scrape: stella-elmst should NOT be present yet")
+	if strings.Contains(metrics1, `name="site-bravo"`) {
+		t.Error("first scrape: site-bravo should NOT be present yet")
 	}
 	if !strings.Contains(metrics1, "ipsec_ike_sas 1") {
 		t.Error("first scrape: expected ipsec_ike_sas 1")
@@ -817,11 +817,11 @@ func TestE2ENewTunnelAppears(t *testing.T) {
 
 	// Second scrape: both tunnels should appear.
 	metrics2 := scrapeMetrics(t, addr)
-	if !strings.Contains(metrics2, `name="stella-cotulla"`) {
-		t.Error("second scrape: expected stella-cotulla")
+	if !strings.Contains(metrics2, `name="site-alpha"`) {
+		t.Error("second scrape: expected site-alpha")
 	}
-	if !strings.Contains(metrics2, `name="stella-elmst"`) {
-		t.Error("second scrape: expected stella-elmst (auto-discovered)")
+	if !strings.Contains(metrics2, `name="site-bravo"`) {
+		t.Error("second scrape: expected site-bravo (auto-discovered)")
 	}
 	if !strings.Contains(metrics2, "ipsec_ike_sas 2") {
 		t.Error("second scrape: expected ipsec_ike_sas 2")
@@ -839,29 +839,29 @@ func TestE2ETunnelRemoved(t *testing.T) {
 			// First scrape: two tunnels
 			{
 				{
-					Name: "stella-cotulla", UID: "1", RemoteHost: "1.2.3.4",
+					Name: "site-alpha", UID: "1", RemoteHost: "1.2.3.4",
 					State: 2, EstablishedSecs: 86400,
 					ChildSAs: []ipsec.ChildSAInfo{
-						{Name: "net", UID: "10", State: 3, LocalTS: "107.155.97.82/32", RemoteTS: "10.10.10.0/24",
+						{Name: "net", UID: "10", State: 3, LocalTS: "203.0.113.10/32", RemoteTS: "10.10.10.0/24",
 							BytesIn: 1000, BytesOut: 500, PacketsIn: 100, PacketsOut: 50, InstalledSecs: 3600},
 					},
 				},
 				{
-					Name: "stella-elmst", UID: "2", RemoteHost: "5.6.7.8",
+					Name: "site-bravo", UID: "2", RemoteHost: "5.6.7.8",
 					State: 2, EstablishedSecs: 7200,
 					ChildSAs: []ipsec.ChildSAInfo{
-						{Name: "net", UID: "20", State: 3, LocalTS: "107.155.97.82/32", RemoteTS: "10.20.20.0/24",
+						{Name: "net", UID: "20", State: 3, LocalTS: "203.0.113.10/32", RemoteTS: "10.20.20.0/24",
 							BytesIn: 50000, BytesOut: 25000, PacketsIn: 5000, PacketsOut: 2500, InstalledSecs: 7100},
 					},
 				},
 			},
-			// Second scrape: stella-elmst removed (connection deleted or peer unreachable)
+			// Second scrape: site-bravo removed (connection deleted or peer unreachable)
 			{
 				{
-					Name: "stella-cotulla", UID: "1", RemoteHost: "1.2.3.4",
+					Name: "site-alpha", UID: "1", RemoteHost: "1.2.3.4",
 					State: 2, EstablishedSecs: 86430,
 					ChildSAs: []ipsec.ChildSAInfo{
-						{Name: "net", UID: "10", State: 3, LocalTS: "107.155.97.82/32", RemoteTS: "10.10.10.0/24",
+						{Name: "net", UID: "10", State: 3, LocalTS: "203.0.113.10/32", RemoteTS: "10.10.10.0/24",
 							BytesIn: 2000, BytesOut: 1000, PacketsIn: 200, PacketsOut: 100, InstalledSecs: 3630},
 					},
 				},
@@ -873,23 +873,23 @@ func TestE2ETunnelRemoved(t *testing.T) {
 
 	// First scrape: both tunnels present.
 	metrics1 := scrapeMetrics(t, addr)
-	if !strings.Contains(metrics1, `name="stella-cotulla"`) {
-		t.Error("first scrape: expected stella-cotulla")
+	if !strings.Contains(metrics1, `name="site-alpha"`) {
+		t.Error("first scrape: expected site-alpha")
 	}
-	if !strings.Contains(metrics1, `name="stella-elmst"`) {
-		t.Error("first scrape: expected stella-elmst")
+	if !strings.Contains(metrics1, `name="site-bravo"`) {
+		t.Error("first scrape: expected site-bravo")
 	}
 	if !strings.Contains(metrics1, "ipsec_ike_sas 2") {
 		t.Error("first scrape: expected ipsec_ike_sas 2")
 	}
 
-	// Second scrape: only stella-cotulla remains.
+	// Second scrape: only site-alpha remains.
 	metrics2 := scrapeMetrics(t, addr)
-	if !strings.Contains(metrics2, `name="stella-cotulla"`) {
-		t.Error("second scrape: expected stella-cotulla")
+	if !strings.Contains(metrics2, `name="site-alpha"`) {
+		t.Error("second scrape: expected site-alpha")
 	}
-	if strings.Contains(metrics2, `name="stella-elmst"`) {
-		t.Error("second scrape: stella-elmst should be gone (tunnel removed)")
+	if strings.Contains(metrics2, `name="site-bravo"`) {
+		t.Error("second scrape: site-bravo should be gone (tunnel removed)")
 	}
 	if !strings.Contains(metrics2, "ipsec_ike_sas 1") {
 		t.Error("second scrape: expected ipsec_ike_sas 1")
@@ -907,7 +907,7 @@ func TestE2ETunnelFlapThenRecover(t *testing.T) {
 			// Scrape 1: tunnel healthy
 			{
 				{
-					Name: "peregrine", UID: "50", RemoteHost: "9.8.7.6",
+					Name: "site-charlie", UID: "50", RemoteHost: "9.8.7.6",
 					State: 2, EstablishedSecs: 43200,
 					ChildSAs: []ipsec.ChildSAInfo{
 						{Name: "net-net", UID: "500", State: 3, LocalTS: "10.99.0.1/32", RemoteTS: "10.99.1.0/24",
@@ -918,7 +918,7 @@ func TestE2ETunnelFlapThenRecover(t *testing.T) {
 			// Scrape 2: tunnel is DELETING (flap in progress)
 			{
 				{
-					Name: "peregrine", UID: "50", RemoteHost: "9.8.7.6",
+					Name: "site-charlie", UID: "50", RemoteHost: "9.8.7.6",
 					State: 6, EstablishedSecs: 43230, // DELETING
 					ChildSAs: []ipsec.ChildSAInfo{
 						{Name: "net-net", UID: "500", State: 8, LocalTS: "10.99.0.1/32", RemoteTS: "10.99.1.0/24",
@@ -929,7 +929,7 @@ func TestE2ETunnelFlapThenRecover(t *testing.T) {
 			// Scrape 3: tunnel recovered with new UID
 			{
 				{
-					Name: "peregrine", UID: "51", RemoteHost: "9.8.7.6",
+					Name: "site-charlie", UID: "51", RemoteHost: "9.8.7.6",
 					State: 2, EstablishedSecs: 5, // newly ESTABLISHED
 					ChildSAs: []ipsec.ChildSAInfo{
 						{Name: "net-net", UID: "501", State: 3, LocalTS: "10.99.0.1/32", RemoteTS: "10.99.1.0/24",
@@ -944,8 +944,8 @@ func TestE2ETunnelFlapThenRecover(t *testing.T) {
 
 	// Scrape 1: healthy tunnel.
 	m1 := scrapeMetrics(t, addr)
-	if !strings.Contains(m1, `ipsec_ike_sa_state{name="peregrine",remote_host="9.8.7.6",uid="50"} 2`) {
-		t.Error("scrape 1: expected peregrine uid=50 state=2 (ESTABLISHED)")
+	if !strings.Contains(m1, `ipsec_ike_sa_state{name="site-charlie",remote_host="9.8.7.6",uid="50"} 2`) {
+		t.Error("scrape 1: expected site-charlie uid=50 state=2 (ESTABLISHED)")
 	}
 
 	// Scrape 2: tunnel DELETING.
@@ -954,8 +954,8 @@ func TestE2ETunnelFlapThenRecover(t *testing.T) {
 		t.Error("scrape 2: expected uid=50 still present (DELETING)")
 	}
 	// Check state is 6 (DELETING).
-	if !strings.Contains(m2, `ipsec_ike_sa_state{name="peregrine",remote_host="9.8.7.6",uid="50"} 6`) {
-		t.Error("scrape 2: expected peregrine state=6 (DELETING)")
+	if !strings.Contains(m2, `ipsec_ike_sa_state{name="site-charlie",remote_host="9.8.7.6",uid="50"} 6`) {
+		t.Error("scrape 2: expected site-charlie state=6 (DELETING)")
 	}
 
 	// Scrape 3: recovered with new UID.
@@ -963,8 +963,8 @@ func TestE2ETunnelFlapThenRecover(t *testing.T) {
 	if strings.Contains(m3, `uid="50"`) {
 		t.Error("scrape 3: old uid=50 should be gone")
 	}
-	if !strings.Contains(m3, `ipsec_ike_sa_state{name="peregrine",remote_host="9.8.7.6",uid="51"} 2`) {
-		t.Error("scrape 3: expected peregrine uid=51 state=2 (ESTABLISHED, recovered)")
+	if !strings.Contains(m3, `ipsec_ike_sa_state{name="site-charlie",remote_host="9.8.7.6",uid="51"} 2`) {
+		t.Error("scrape 3: expected site-charlie uid=51 state=2 (ESTABLISHED, recovered)")
 	}
 	// Byte counters reset with new SA.
 	if !strings.Contains(m3, `uid="501"`) {

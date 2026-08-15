@@ -166,11 +166,11 @@ The `ipsec_child_sa_state` metric reports a numeric state value:
 
 | Label | Appears On | Description |
 | --- | --- | --- |
-| `name` | IKE SA metrics | strongSwan connection name (e.g. `stella-cotulla`). |
+| `name` | IKE SA metrics | strongSwan connection name (e.g. `site-alpha`). |
 | `uid` | IKE and child SA metrics | Unique ID assigned by charon. Changes on rekey. |
 | `remote_host` | IKE and child SA metrics | IP address of the remote peer. |
 | `ike_sa_name` | child SA metrics | Name of the parent IKE SA. |
-| `local_ts` | child SA metrics | Local traffic selector (e.g. `107.155.97.82/32`). |
+| `local_ts` | child SA metrics | Local traffic selector (e.g. `203.0.113.10/32`). |
 | `remote_ts` | child SA metrics | Remote traffic selector (e.g. `10.10.10.0/24`). |
 | `priority` | `ipsec_queues` | Job queue priority level. |
 
