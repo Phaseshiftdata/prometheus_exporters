@@ -8,7 +8,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
   packages: write
   pages: write
   id-token: write
@@ -21,6 +21,7 @@ env:
   GO_VERSION: "1.26.x"
   NODE_VERSION: "24"
   REGISTRY: ghcr.io/phaseshiftdata
+  SITE_DOMAIN: prometheus_exporters.phaseshiftdata.com
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────
@@ -144,7 +145,7 @@ jobs:
           IMAGE_TAG: ${{ steps.tag.outputs.tag }}
 
   # ──────────────────────────────────────────────────────────────────────
-  # Site build — compile site, pre-deployment tests
+  # Site build — compile site and run pre-deployment e2e tests
   # ──────────────────────────────────────────────────────────────────────
   site-build:
     needs: test
@@ -156,36 +157,55 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install site dependencies
         run: cd site && npm install
-      - name: Build site
-        run: cd site && npx vite build
+      - name: Build site with relative base for blue-green
+        run: cd site && npx vite build --base='./'
+      - name: Write version marker for deployment verification
+        run: echo "${{ github.sha }}" > site/dist/version.txt
       - name: Install Playwright
         run: cd site && npx playwright install --with-deps chromium
       - name: Run pre-deployment e2e tests
         run: cd site && npx playwright test e2e/site.spec.ts
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
+      - name: Upload site build artifact
+        uses: actions/upload-artifact@v7
         with:
+          name: site-build
           path: site/dist/
+          retention-days: 1
 
   # ──────────────────────────────────────────────────────────────────────
-  # Deploy pages — publish to GitHub Pages (main only)
+  # Deploy staging — push new build to /staging/ on gh-pages branch
   # ──────────────────────────────────────────────────────────────────────
-  deploy-pages:
+  deploy-staging:
     needs: site-build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v5
+      - uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+          path: gh-pages
+      - uses: actions/download-artifact@v7
+        with:
+          name: site-build
+          path: new-build
+      - name: Deploy new build to /staging/
+        run: |
+          cd gh-pages
+          rm -rf staging
+          cp -r ../new-build staging
+          touch .nojekyll
+          echo "${{ env.SITE_DOMAIN }}" > CNAME
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes" || git commit -m "Deploy staging from ${{ github.sha }}"
+          git push origin gh-pages
 
   # ──────────────────────────────────────────────────────────────────────
-  # Post-deployment verification — Playwright PDV tests against live site
+  # PDV staging — verify staging before promoting to production
   # ──────────────────────────────────────────────────────────────────────
-  post-deployment-verification:
-    needs: deploy-pages
+  pdv-staging:
+    needs: deploy-staging
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -195,11 +215,85 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install Playwright
         run: cd site && npm install && npx playwright install --with-deps chromium
-      - name: Wait for deployment propagation
+      - name: Wait for staging deploy to propagate
         run: |
-          echo "Waiting 90s for CDN cache propagation..."
-          sleep 90
-      - name: Run post-deployment verification tests
+          EXPECTED="${{ github.sha }}"
+          echo "Waiting for staging to serve commit ${EXPECTED}..."
+          for i in $(seq 1 60); do
+            CACHEBUST="?cb=$(date +%s)-$i"
+            VER=$(curl -sk "https://${{ env.SITE_DOMAIN }}/staging/version.txt${CACHEBUST}" 2>/dev/null | tr -d '[:space:]')
+            if [ "$VER" = "$EXPECTED" ]; then
+              echo "Staging confirmed after $((i*5))s"
+              exit 0
+            fi
+            echo "Attempt $i/60: got=$VER"
+            sleep 5
+          done
+          echo "ERROR: staging did not converge after 5 minutes"
+          exit 1
+      - name: Run PDV against staging
         run: cd site && npx playwright test --config=playwright.pdv.config.ts
         env:
-          SITE_URL: https://prometheus_exporters.phaseshiftdata.com
+          SITE_URL: https://${{ env.SITE_DOMAIN }}/staging/
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Promote — copy staging to production (only after PDV passes)
+  # ──────────────────────────────────────────────────────────────────────
+  promote-to-production:
+    needs: pdv-staging
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+          path: gh-pages
+      - name: Promote staging to production root
+        run: |
+          cd gh-pages
+          cp CNAME /tmp/CNAME.bak 2>/dev/null || true
+          cp .nojekyll /tmp/.nojekyll.bak 2>/dev/null || true
+          find . -maxdepth 1 ! -name '.' ! -name '.git' ! -name 'staging' ! -name 'CNAME' ! -name '.nojekyll' -exec rm -rf {} +
+          cp -r staging/* .
+          cp /tmp/CNAME.bak CNAME 2>/dev/null || echo "${{ env.SITE_DOMAIN }}" > CNAME
+          cp /tmp/.nojekyll.bak .nojekyll 2>/dev/null || touch .nojekyll
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes" || git commit -m "Promote staging to production from ${{ github.sha }}"
+          git push origin gh-pages
+
+  # ──────────────────────────────────────────────────────────────────────
+  # PDV production — verify production after promotion
+  # ──────────────────────────────────────────────────────────────────────
+  pdv-production:
+    needs: promote-to-production
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install Playwright
+        run: cd site && npm install && npx playwright install --with-deps chromium
+      - name: Wait for production deploy to propagate
+        run: |
+          EXPECTED="${{ github.sha }}"
+          echo "Waiting for production to serve commit ${EXPECTED}..."
+          for i in $(seq 1 60); do
+            CACHEBUST="?cb=$(date +%s)-$i"
+            VER=$(curl -sk "https://${{ env.SITE_DOMAIN }}/version.txt${CACHEBUST}" 2>/dev/null | tr -d '[:space:]')
+            if [ "$VER" = "$EXPECTED" ]; then
+              echo "Production confirmed after $((i*5))s"
+              exit 0
+            fi
+            echo "Attempt $i/60: got=$VER"
+            sleep 5
+          done
+          echo "ERROR: production did not converge after 5 minutes"
+          exit 1
+      - name: Run PDV against production
+        run: cd site && npx playwright test --config=playwright.pdv.config.ts
+        env:
+          SITE_URL: https://${{ env.SITE_DOMAIN }}
