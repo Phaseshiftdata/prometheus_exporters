@@ -19,6 +19,9 @@ test.describe("site deployment verification", () => {
 
     await page.click('a[href="#/cloudflare-exporter"]');
     await expect(page.locator(".main")).toContainText("Cloudflare Exporter");
+
+    await page.click('a[href="#/github-exporter"]');
+    await expect(page.locator(".main")).toContainText("GitHub Exporter");
   });
 
   test("favicon.ico is served and returns valid response", async ({ request }) => {

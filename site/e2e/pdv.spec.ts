@@ -161,12 +161,121 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator("pre code")).toBeVisible();
   });
 
+  test("network exporter page has configuration documentation", async ({ page }) => {
+    await page.goto("/#/network-exporter");
+    await expect(page.locator(".main")).toContainText("--listen-address");
+    await expect(page.locator(".main")).toContainText("--proc-path");
+    await expect(page.locator(".main")).toContainText("--sys-path");
+    await expect(page.locator(".main")).toContainText("--log-level");
+  });
+
+  test("network exporter page has collector documentation", async ({ page }) => {
+    await page.goto("/#/network-exporter");
+    await expect(page.locator(".main")).toContainText("Metrics: ARP");
+    await expect(page.locator(".main")).toContainText("Metrics: Interface");
+    await expect(page.locator(".main")).toContainText("Metrics: Network Graph");
+    await expect(page.locator(".main")).toContainText("Metrics: Conntrack");
+    await expect(page.locator(".main")).toContainText("Metrics: Firewall");
+  });
+
+  test("network exporter page has metrics catalog", async ({ page }) => {
+    await page.goto("/#/network-exporter");
+    await expect(page.locator(".main")).toContainText("network_arp_entry");
+    await expect(page.locator(".main")).toContainText("network_interface_type");
+    await expect(page.locator(".main")).toContainText("network_graph_edge");
+    await expect(page.locator(".main")).toContainText("network_port_connections");
+    await expect(page.locator(".main")).toContainText("network_firewall_drop_packets_total");
+    await expect(page.locator(".main")).toContainText("network_firewall_collector_up");
+    await expect(page.locator(".main")).toContainText("network_conntrack_accounting_enabled");
+  });
+
+  test("network exporter page has architecture section", async ({ page }) => {
+    await page.goto("/#/network-exporter");
+    await expect(page.locator(".main")).toContainText("Architecture");
+    await expect(page.locator(".main")).toContainText("NETLINK_ROUTE");
+    await expect(page.locator(".main")).toContainText("NETLINK_NETFILTER");
+    await expect(page.locator(".main")).toContainText("procfs");
+    await expect(page.locator(".main")).toContainText("sysfs");
+  });
+
+  test("network exporter page has deployment section", async ({ page }) => {
+    await page.goto("/#/network-exporter");
+    await expect(page.locator(".main")).toContainText("DaemonSet");
+    await expect(page.locator(".main")).toContainText("CAP_NET_ADMIN");
+    await expect(page.locator(".main")).toContainText("hostPID");
+    await expect(page.locator(".main")).toContainText("hostNetwork");
+  });
+
+  test("network exporter page has failure modes section", async ({ page }) => {
+    await page.goto("/#/network-exporter");
+    await expect(page.locator(".main")).toContainText("Failure Modes");
+    await expect(page.locator(".main")).toContainText("ContinueOnError");
+    await expect(page.locator(".main")).toContainText("nftables not available");
+  });
+
   // IPsec exporter page coverage
   test("ipsec exporter page renders with content", async ({ page }) => {
     await page.goto("/#/ipsec-exporter");
     await expect(page.locator(".main")).toContainText("IPsec Exporter");
     await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/ipsec_exporter");
     await expect(page.locator("pre code")).toBeVisible();
+  });
+
+  test("ipsec exporter page has VICI socket documentation", async ({ page }) => {
+    await page.goto("/#/ipsec-exporter");
+    await expect(page.locator(".main")).toContainText("VICI");
+    await expect(page.locator(".main")).toContainText("/var/run/charon.vici");
+    await expect(page.locator(".main")).toContainText("strongSwan");
+    await expect(page.locator(".main")).toContainText("list-sas");
+    await expect(page.locator(".main")).toContainText("govici");
+  });
+
+  test("ipsec exporter page has IPsec metrics catalog", async ({ page }) => {
+    await page.goto("/#/ipsec-exporter");
+    await expect(page.locator(".main")).toContainText("ipsec_up");
+    await expect(page.locator(".main")).toContainText("ipsec_ike_sa_state");
+    await expect(page.locator(".main")).toContainText("ipsec_child_sa_bytes_in");
+    await expect(page.locator(".main")).toContainText("ipsec_child_sa_bytes_out");
+    await expect(page.locator(".main")).toContainText("ipsec_uptime_seconds");
+    await expect(page.locator(".main")).toContainText("ipsec_workers_total");
+    await expect(page.locator(".main")).toContainText("ipsec_queues");
+  });
+
+  test("ipsec exporter page has configuration flags", async ({ page }) => {
+    await page.goto("/#/ipsec-exporter");
+    await expect(page.locator(".main")).toContainText("--listen-address");
+    await expect(page.locator(".main")).toContainText("--proc-path");
+    await expect(page.locator(".main")).toContainText("--sys-path");
+    await expect(page.locator(".main")).toContainText("--vici-socket");
+    await expect(page.locator(".main")).toContainText("--log-level");
+  });
+
+  test("ipsec exporter page has SA state tables", async ({ page }) => {
+    await page.goto("/#/ipsec-exporter");
+    await expect(page.locator(".main")).toContainText("ESTABLISHED");
+    await expect(page.locator(".main")).toContainText("CONNECTING");
+    await expect(page.locator(".main")).toContainText("INSTALLED");
+    await expect(page.locator(".main")).toContainText("REKEYED");
+  });
+
+  test("ipsec exporter page has failure modes section", async ({ page }) => {
+    await page.goto("/#/ipsec-exporter");
+    await expect(page.locator(".main")).toContainText("VICI socket unavailable");
+    await expect(page.locator(".main")).toContainText("ContinueOnError");
+    await expect(page.locator(".main")).toContainText("ipsec_up 0");
+  });
+
+  test("ipsec exporter page has tunnel auto-discovery section", async ({ page }) => {
+    await page.goto("/#/ipsec-exporter");
+    await expect(page.locator(".main")).toContainText("Tunnel Auto-Discovery");
+    await expect(page.locator(".main")).toContainText("uid");
+  });
+
+  test("ipsec exporter page has network metrics", async ({ page }) => {
+    await page.goto("/#/ipsec-exporter");
+    await expect(page.locator(".main")).toContainText("network_arp_entry");
+    await expect(page.locator(".main")).toContainText("network_firewall_drop_packets_total");
+    await expect(page.locator(".main")).toContainText("network_port_connections");
   });
 
   // Cloudflare exporter page comprehensive content checks
@@ -224,5 +333,89 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator("body")).toContainText("9101");
     await expect(page.locator("body")).toContainText("9102");
     await expect(page.locator("body")).toContainText("9199");
+  });
+
+  // GitHub exporter page coverage
+  test("github exporter page renders with content", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("GitHub Exporter");
+    await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/github_exporter");
+    await expect(page.locator("pre code")).toBeVisible();
+  });
+
+  test("github exporter page has configuration documentation", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("--github-app-id");
+    await expect(page.locator(".main")).toContainText("--poll-interval");
+    await expect(page.locator(".main")).toContainText("--listen-address");
+    await expect(page.locator(".main")).toContainText("--database-url");
+  });
+
+  test("github exporter page has metrics catalog", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("github_exporter_workflow_runs_total");
+    await expect(page.locator(".main")).toContainText("github_exporter_open_pull_requests");
+    await expect(page.locator(".main")).toContainText("github_exporter_rate_limit_remaining");
+    await expect(page.locator(".main")).toContainText("github_exporter_backfill_pending_job_runs");
+  });
+
+  test("github exporter page has installation instructions", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("docker");
+    await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/github_exporter");
+  });
+
+  test("github exporter page has architecture section", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("Poller");
+    await expect(page.locator(".main")).toContainText("Backfiller");
+    await expect(page.locator(".main")).toContainText("Rate Limit Manager");
+    await expect(page.locator(".main")).toContainText("PostgreSQL Store");
+  });
+
+  test("github exporter page has GitHub App setup section", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("GitHub App Setup");
+    await expect(page.locator(".main")).toContainText("GitHub App installation");
+    await expect(page.locator(".main")).toContainText("5,000 requests per hour");
+  });
+
+  test("github exporter page has database section", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("Database");
+    await expect(page.locator(".main")).toContainText("PostgreSQL 14");
+    await expect(page.locator(".main")).toContainText("90 days");
+  });
+
+  test("github exporter page has rate limiting section", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("Rate Limiting");
+    await expect(page.locator(".main")).toContainText("Primary");
+    await expect(page.locator(".main")).toContainText("Secondary");
+  });
+
+  test("github exporter page has endpoints section", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("/metrics");
+  });
+
+  test("github exporter page has secret configuration section", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("Secret Configuration");
+    await expect(page.locator(".main")).toContainText("database-password-file");
+    await expect(page.locator(".main")).toContainText("openbao");
+  });
+
+  test("github exporter page has backfill metrics", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("github_exporter_backfill_last_step_timestamp_seconds");
+    await expect(page.locator(".main")).toContainText("github_exporter_api_requests_total");
+  });
+
+  test("github exporter page has failure modes section", async ({ page }) => {
+    await page.goto("/#/github-exporter");
+    await expect(page.locator(".main")).toContainText("Failure Modes");
+    await expect(page.locator(".main")).toContainText("Secondary rate limit");
+    await expect(page.locator(".main")).toContainText("Database unavailable");
   });
 });
