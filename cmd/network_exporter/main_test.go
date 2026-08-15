@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spf13/cobra"
+
+	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
 )
 
 func TestRootCmd(t *testing.T) {
@@ -42,7 +44,7 @@ func TestRootCmdExecute(t *testing.T) {
 
 func TestSetupLogging(t *testing.T) {
 	for _, level := range []string{"debug", "info", "warn", "error", "invalid"} {
-		setupLogging(level) // should not panic
+		exporter.SetupLogging(level) // should not panic
 	}
 }
 
@@ -56,7 +58,7 @@ func TestCreateNetworkCollectors(t *testing.T) {
 func TestServeAndShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
-	go func() { errCh <- serve(ctx, "127.0.0.1:0", prometheus.NewRegistry()) }()
+	go func() { errCh <- exporter.Serve(ctx, "127.0.0.1:0", "Network Exporter", prometheus.NewRegistry()) }()
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 
@@ -72,7 +74,7 @@ func TestServeAndShutdown(t *testing.T) {
 
 func TestServeInvalidAddress(t *testing.T) {
 	ctx := context.Background()
-	err := serve(ctx, "invalid-address-no-port", prometheus.NewRegistry())
+	err := exporter.Serve(ctx, "invalid-address-no-port", "Network Exporter", prometheus.NewRegistry())
 	if err == nil {
 		t.Error("expected error for invalid listen address")
 	}
@@ -111,23 +113,22 @@ func TestRunRegistrationError(t *testing.T) {
 }
 
 func TestExecuteReturnsZero(t *testing.T) {
-	oldArgs := os.Args
-	os.Args = []string{"network_exporter", "--help"}
-	defer func() { os.Args = oldArgs }()
-
-	code := execute()
+	code := exporter.Execute(func() *cobra.Command {
+		cmd := rootCmd()
+		cmd.SetArgs([]string{"--help"})
+		return cmd
+	})
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d", code)
 	}
 }
 
 func TestExecuteReturnsOneOnError(t *testing.T) {
-	oldArgs := os.Args
-	// --unknown-flag will cause Cobra to return an error.
-	os.Args = []string{"network_exporter", "--unknown-flag"}
-	defer func() { os.Args = oldArgs }()
-
-	code := execute()
+	code := exporter.Execute(func() *cobra.Command {
+		cmd := rootCmd()
+		cmd.SetArgs([]string{"--unknown-flag"})
+		return cmd
+	})
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
 	}
@@ -140,7 +141,7 @@ func TestServeShutdownError(t *testing.T) {
 	reg := prometheus.NewRegistry()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- serve(ctx, "127.0.0.1:0", reg) }()
+	go func() { errCh <- exporter.Serve(ctx, "127.0.0.1:0", "Network Exporter", reg) }()
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 

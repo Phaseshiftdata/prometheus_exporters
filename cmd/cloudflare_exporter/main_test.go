@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
+
 	cfclient "github.com/phaseshiftdata/prometheus_exporters/internal/cloudflare"
 	"github.com/phaseshiftdata/prometheus_exporters/internal/collector"
 	"github.com/phaseshiftdata/prometheus_exporters/internal/discovery"
@@ -469,25 +471,22 @@ func TestToInternalConfig(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestExecute_Success(t *testing.T) {
-	// execute() calls rootCmd().Execute(). With --version it should succeed
-	// and return 0. We override os.Args to inject --version.
-	origArgs := os.Args
-	defer func() { os.Args = origArgs }()
-	os.Args = []string{"cloudflare_exporter", "--version"}
-
-	code := execute()
+	code := exporter.Execute(func() *cobra.Command {
+		cmd := rootCmd()
+		cmd.SetArgs([]string{"--version"})
+		return cmd
+	})
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
 }
 
 func TestExecute_Error(t *testing.T) {
-	// An invalid flag should cause execute() to return 1.
-	origArgs := os.Args
-	defer func() { os.Args = origArgs }()
-	os.Args = []string{"cloudflare_exporter", "--no-such-flag"}
-
-	code := execute()
+	code := exporter.Execute(func() *cobra.Command {
+		cmd := rootCmd()
+		cmd.SetArgs([]string{"--no-such-flag"})
+		return cmd
+	})
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d", code)
 	}

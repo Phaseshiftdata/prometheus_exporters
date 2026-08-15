@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/arp"
+	exporterpkg "github.com/phaseshiftdata/prometheus_exporters/src/exporter"
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/conntrack"
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/firewall"
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/iface"
@@ -54,7 +55,7 @@ func TestE2EIpsecExporterMetrics(t *testing.T) {
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- serve(ctx, addr, reg) }()
+	go func() { errCh <- exporterpkg.Serve(ctx, addr, "IPsec Exporter", reg) }()
 
 	// Wait for server to be ready.
 	waitForServer(t, addr)
@@ -298,7 +299,7 @@ func startE2EServer(t *testing.T, viciClient ipsec.VICIClient) (string, context.
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { _ = serve(ctx, addr, reg) }()
+	go func() { _ = exporterpkg.Serve(ctx, addr, "IPsec Exporter", reg) }()
 	waitForServer(t, addr)
 	return addr, cancel
 }
