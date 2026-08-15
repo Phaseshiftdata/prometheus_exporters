@@ -6,15 +6,16 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/spf13/cobra"
 
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/libvirt"
+	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
 )
 
 // TestRootCmd verifies the cobra command is wired correctly.
@@ -46,7 +47,7 @@ func TestExecuteInvalidPort(t *testing.T) {
 func TestSetupLogging(t *testing.T) {
 	levels := []string{"debug", "info", "warn", "error", "invalid"}
 	for _, level := range levels {
-		setupLogging(level) // should not panic
+		exporter.SetupLogging(level) // should not panic
 	}
 }
 
@@ -175,7 +176,7 @@ func startTestServer(t *testing.T, client libvirt.LibvirtClient) (string, contex
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { _ = serve(ctx, addr, reg) }()
+	go func() { _ = exporter.Serve(ctx, addr, "Libvirt Exporter", reg) }()
 	waitForServer(t, addr)
 	return addr, cancel
 }
@@ -310,7 +311,7 @@ func TestE2EServeShutdown(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
-	go func() { errCh <- serve(ctx, addr, reg) }()
+	go func() { errCh <- exporter.Serve(ctx, addr, "Libvirt Exporter", reg) }()
 	waitForServer(t, addr)
 
 	// Trigger shutdown.
@@ -386,22 +387,24 @@ func TestRunDuplicateRegistration(t *testing.T) {
 	}
 }
 
-// TestExecuteFunction verifies the execute function by overriding os.Args.
+// TestExecuteFunction verifies the Execute function.
 func TestExecuteFunction(t *testing.T) {
-	// Save and restore os.Args.
-	origArgs := os.Args
-	defer func() { os.Args = origArgs }()
-
-	// Using --help ensures execute returns 0 without starting a server.
-	os.Args = []string{"libvirt_exporter", "--help"}
-	code := execute()
+	// Using --help ensures Execute returns 0 without starting a server.
+	code := exporter.Execute(func() *cobra.Command {
+		cmd := rootCmd()
+		cmd.SetArgs([]string{"--help"})
+		return cmd
+	})
 	if code != 0 {
 		t.Errorf("expected exit code 0 with --help, got %d", code)
 	}
 
-	// Using an invalid flag ensures execute returns 1.
-	os.Args = []string{"libvirt_exporter", "--invalid-flag"}
-	code = execute()
+	// Using an invalid flag ensures Execute returns 1.
+	code = exporter.Execute(func() *cobra.Command {
+		cmd := rootCmd()
+		cmd.SetArgs([]string{"--invalid-flag"})
+		return cmd
+	})
 	if code != 1 {
 		t.Errorf("expected exit code 1 with invalid flag, got %d", code)
 	}
@@ -451,7 +454,7 @@ func TestServeListenError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err = serve(ctx, addr, reg)
+	err = exporter.Serve(ctx, addr, "Libvirt Exporter", reg)
 	if err == nil {
 		t.Error("expected error from serve when port is already in use")
 	}

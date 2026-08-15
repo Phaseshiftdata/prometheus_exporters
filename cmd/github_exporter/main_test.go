@@ -19,7 +19,9 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spf13/cobra"
 
+	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
 	ghpkg "github.com/phaseshiftdata/prometheus_exporters/src/github"
 	ghdb "github.com/phaseshiftdata/prometheus_exporters/src/github/db"
 )
@@ -58,27 +60,27 @@ func TestRootCmd(t *testing.T) {
 
 func TestSetupLogging(t *testing.T) {
 	for _, level := range []string{"debug", "info", "warn", "error", "invalid"} {
-		setupLogging(level)
+		exporter.SetupLogging(level)
 	}
 }
 
 func TestExecuteReturnsZero(t *testing.T) {
-	oldArgs := os.Args
-	os.Args = []string{"github_exporter", "--help"}
-	defer func() { os.Args = oldArgs }()
-
-	code := execute()
+	code := exporter.Execute(func() *cobra.Command {
+		cmd := rootCmd()
+		cmd.SetArgs([]string{"--help"})
+		return cmd
+	})
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d", code)
 	}
 }
 
 func TestExecuteReturnsOneOnError(t *testing.T) {
-	oldArgs := os.Args
-	os.Args = []string{"github_exporter", "--unknown-flag"}
-	defer func() { os.Args = oldArgs }()
-
-	code := execute()
+	code := exporter.Execute(func() *cobra.Command {
+		cmd := rootCmd()
+		cmd.SetArgs([]string{"--unknown-flag"})
+		return cmd
+	})
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
 	}
@@ -382,18 +384,17 @@ func TestStoreAdapterSampleOpenPullRequestsError(t *testing.T) {
 func TestRootCmdRunE(t *testing.T) {
 	// Execute the root command (not --help) to exercise the RunE closure.
 	// It will fail on auth because the key file is missing, but the RunE
-	// code path (lines 53-64) will be covered.
-	oldArgs := os.Args
-	os.Args = []string{
-		"github_exporter",
-		"--github-key-file", "/nonexistent/key.pem",
-		"--github-app-id", "1",
-		"--github-install-id", "1",
-		"--log-level", "error",
-	}
-	defer func() { os.Args = oldArgs }()
-
-	code := execute()
+	// code path will be covered.
+	code := exporter.Execute(func() *cobra.Command {
+		cmd := rootCmd()
+		cmd.SetArgs([]string{
+			"--github-key-file", "/nonexistent/key.pem",
+			"--github-app-id", "1",
+			"--github-install-id", "1",
+			"--log-level", "error",
+		})
+		return cmd
+	})
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
 	}

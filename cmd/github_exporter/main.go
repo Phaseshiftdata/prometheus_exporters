@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 
+	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
 	ghpkg "github.com/phaseshiftdata/prometheus_exporters/src/github"
 	ghdb "github.com/phaseshiftdata/prometheus_exporters/src/github/db"
 	"github.com/phaseshiftdata/prometheus_exporters/src/secrets"
@@ -26,14 +27,7 @@ import (
 )
 
 func main() {
-	os.Exit(execute())
-}
-
-func execute() int {
-	if err := rootCmd().Execute(); err != nil {
-		return 1
-	}
-	return 0
+	os.Exit(exporter.Execute(rootCmd))
 }
 
 func rootCmd() *cobra.Command {
@@ -61,7 +55,7 @@ func rootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "github_exporter",
 		Short:   "Prometheus exporter for GitHub CI/CD and repository statistics",
-		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version.Version, version.GitCommit, version.BuildDate),
+		Version: exporter.VersionString(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resolvedDatabaseURL := databaseURL
 
@@ -205,7 +199,7 @@ type runConfig struct {
 }
 
 func run(ctx context.Context, cfg runConfig) error {
-	setupLogging(cfg.logLevel)
+	exporter.SetupLogging(cfg.logLevel)
 
 	// Resolve database URL from flag or environment.
 	dbURL := cfg.databaseURL
@@ -317,21 +311,6 @@ func serve(ctx context.Context, listenAddr string, reg *prometheus.Registry) err
 		return fmt.Errorf("listen: %w", err)
 	}
 	return nil
-}
-
-func setupLogging(level string) {
-	var lvl slog.Level
-	switch level {
-	case "debug":
-		lvl = slog.LevelDebug
-	case "warn":
-		lvl = slog.LevelWarn
-	case "error":
-		lvl = slog.LevelError
-	default:
-		lvl = slog.LevelInfo
-	}
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})))
 }
 
 // storeAdapter wraps db.Store to satisfy github.StoreWriter by converting

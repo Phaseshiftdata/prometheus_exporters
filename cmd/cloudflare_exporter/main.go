@@ -21,6 +21,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
+
 	cfclient "github.com/phaseshiftdata/prometheus_exporters/internal/cloudflare"
 	"github.com/phaseshiftdata/prometheus_exporters/internal/collector"
 	"github.com/phaseshiftdata/prometheus_exporters/internal/config"
@@ -34,14 +36,7 @@ import (
 )
 
 func main() {
-	os.Exit(execute())
-}
-
-func execute() int {
-	if err := rootCmd().Execute(); err != nil {
-		return 1
-	}
-	return 0
+	os.Exit(exporter.Execute(rootCmd))
 }
 
 // runConfig holds all configuration needed by the run function, populated
@@ -123,8 +118,7 @@ func rootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cloudflare_exporter",
 		Short: "Prometheus exporter for Cloudflare Zero Trust, DNS, and domain metrics",
-		Version: fmt.Sprintf("%s (commit: %s, built: %s)",
-			version.Version, version.GitCommit, version.BuildDate),
+		Version: exporter.VersionString(),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Resolve file-based secrets before building the config.
