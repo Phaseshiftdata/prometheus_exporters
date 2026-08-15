@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://prometheus_exporters.phaseshiftdata.com/sitemap.xml
