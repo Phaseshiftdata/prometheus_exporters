@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/arp"
+	exporterpkg "github.com/phaseshiftdata/prometheus_exporters/src/exporter"
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/conntrack"
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/firewall"
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/iface"
@@ -52,7 +53,7 @@ func TestE2ENetworkExporterMetrics(t *testing.T) {
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- serve(ctx, addr, reg) }()
+	go func() { errCh <- exporterpkg.Serve(ctx, addr, "Network Exporter", reg) }()
 
 	// Wait for server to be ready.
 	waitForServer(t, addr)
@@ -163,7 +164,7 @@ func TestE2EFailingCollectorDoesNotBlankMetrics(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = serve(ctx, addr, reg) }()
+	go func() { _ = exporterpkg.Serve(ctx, addr, "Network Exporter", reg) }()
 	waitForServer(t, addr)
 
 	resp, err := http.Get("http://" + addr + "/metrics")
@@ -231,7 +232,7 @@ func TestE2EFirewallIsAlwaysVisible(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = serve(ctx, addr, reg) }()
+	go func() { _ = exporterpkg.Serve(ctx, addr, "Network Exporter", reg) }()
 	waitForServer(t, addr)
 
 	metrics := scrapeMetrics(t, addr)
@@ -433,7 +434,7 @@ func startCustomE2EServer(t *testing.T, collectors ...prometheus.Collector) (str
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { _ = serve(ctx, addr, reg) }()
+	go func() { _ = exporterpkg.Serve(ctx, addr, "Network Exporter", reg) }()
 	waitForServer(t, addr)
 	return addr, cancel
 }
