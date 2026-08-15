@@ -8,6 +8,7 @@ infrastructure, IPsec tunnels, and Cloudflare services.
 - **network_exporter** - Network connectivity and performance metrics
 - **ipsec_exporter** - IPsec tunnel status and traffic metrics
 - **cloudflare_exporter** - Cloudflare analytics, Zero Trust, DNS, and certificate metrics
+- **libvirt_exporter** - Libvirt hypervisor and virtual machine metrics
 
 ## Documentation
 

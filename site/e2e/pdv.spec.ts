@@ -20,11 +20,12 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator(".footer-inner")).toBeVisible();
   });
 
-  test("home page contains all three exporters", async ({ page }) => {
+  test("home page contains all exporters", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("body")).toContainText("network_exporter");
     await expect(page.locator("body")).toContainText("ipsec_exporter");
     await expect(page.locator("body")).toContainText("cloudflare_exporter");
+    await expect(page.locator("body")).toContainText("libvirt_exporter");
   });
 
   test("navigation links are present and functional", async ({ page }) => {
@@ -328,11 +329,12 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator("body")).toContainText("commit-sha");
   });
 
-  test("home page has all three exporter ports", async ({ page }) => {
+  test("home page has all exporter ports", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("body")).toContainText("9101");
     await expect(page.locator("body")).toContainText("9102");
     await expect(page.locator("body")).toContainText("9199");
+    await expect(page.locator("body")).toContainText("9177");
   });
 
   // GitHub exporter page coverage
@@ -417,5 +419,30 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator(".main")).toContainText("Failure Modes");
     await expect(page.locator(".main")).toContainText("Secondary rate limit");
     await expect(page.locator(".main")).toContainText("Database unavailable");
+  });
+
+  // Libvirt exporter page coverage
+  test("navigation to libvirt page works", async ({ page }) => {
+    await page.goto("/");
+    await page.click('a[href="#/libvirt-exporter"]');
+    await expect(page.locator(".main")).toContainText("Libvirt Exporter");
+  });
+
+  test("libvirt exporter page has config flags", async ({ page }) => {
+    await page.goto("/#/libvirt-exporter");
+    await expect(page.locator(".main")).toContainText("--libvirt-uri");
+    await expect(page.locator(".main")).toContainText("--listen-address");
+  });
+
+  test("libvirt exporter page has key metrics", async ({ page }) => {
+    await page.goto("/#/libvirt-exporter");
+    await expect(page.locator(".main")).toContainText("libvirt_up");
+    await expect(page.locator(".main")).toContainText("libvirt_domain_cpu_time_seconds_total");
+  });
+
+  test("home page lists libvirt_exporter and port 9177", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("body")).toContainText("libvirt_exporter");
+    await expect(page.locator("body")).toContainText("9177");
   });
 });

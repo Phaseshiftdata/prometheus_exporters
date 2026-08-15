@@ -15,6 +15,7 @@ require (
 	github.com/vishvananda/netlink v1.3.1
 	go.uber.org/zap v1.28.0
 	golang.org/x/sys v0.47.0
+	libvirt.org/go/libvirt v1.12006.0
 )
 
 require (
