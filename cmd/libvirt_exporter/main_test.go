@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -322,6 +323,172 @@ func TestE2EServeShutdown(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Error("server did not shut down within 5s")
+	}
+}
+
+// TestCreateCollector verifies that createCollector returns a valid collector.
+func TestCreateCollector(t *testing.T) {
+	c := createCollector("qemu:///system")
+	if c == nil {
+		t.Fatal("createCollector returned nil")
+	}
+	if c.Name() != "libvirt" {
+		t.Errorf("expected name 'libvirt', got %q", c.Name())
+	}
+}
+
+// TestRunWithRegistry verifies that run works with a provided registry.
+func TestRunWithRegistry(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	reg := prometheus.NewRegistry()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- run(ctx, addr, "test:///default", "debug", reg)
+	}()
+
+	waitForServer(t, addr)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Errorf("run returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("run did not finish within 5s")
+	}
+}
+
+// TestRunDuplicateRegistration verifies that run returns an error when a
+// collector is already registered.
+func TestRunDuplicateRegistration(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	// Pre-register a collector with the same name to cause a conflict.
+	c := libvirt.NewWithClient(&mockLibvirtClient{available: true})
+	if err := reg.Register(c); err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := run(ctx, "127.0.0.1:0", "test:///default", "info", reg)
+	if err == nil {
+		t.Error("expected error from duplicate registration, got nil")
+	}
+}
+
+// TestExecuteFunction verifies the execute function by overriding os.Args.
+func TestExecuteFunction(t *testing.T) {
+	// Save and restore os.Args.
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+
+	// Using --help ensures execute returns 0 without starting a server.
+	os.Args = []string{"libvirt_exporter", "--help"}
+	code := execute()
+	if code != 0 {
+		t.Errorf("expected exit code 0 with --help, got %d", code)
+	}
+
+	// Using an invalid flag ensures execute returns 1.
+	os.Args = []string{"libvirt_exporter", "--invalid-flag"}
+	code = execute()
+	if code != 1 {
+		t.Errorf("expected exit code 1 with invalid flag, got %d", code)
+	}
+}
+
+// TestRunWithNilRegistry verifies that run creates its own registry when nil
+// is passed.
+func TestRunWithNilRegistry(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- run(ctx, addr, "test:///default", "warn", nil)
+	}()
+
+	waitForServer(t, addr)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Errorf("run returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("run did not finish within 5s")
+	}
+}
+
+// TestServeListenError verifies that serve returns an error when the address
+// is already in use.
+func TestServeListenError(t *testing.T) {
+	// Bind a listener to occupy the port.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	addr := ln.Addr().String()
+
+	reg := prometheus.NewRegistry()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = serve(ctx, addr, reg)
+	if err == nil {
+		t.Error("expected error from serve when port is already in use")
+	}
+}
+
+// TestRootCmdRunE verifies that the RunE callback of rootCmd executes run().
+func TestRootCmdRunE(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--listen-address", addr,
+		"--libvirt-uri", "test:///default",
+		"--log-level", "error",
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- cmd.ExecuteContext(ctx)
+	}()
+
+	waitForServer(t, addr)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Errorf("cmd.Execute returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("command did not finish within 5s")
 	}
 }
 

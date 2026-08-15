@@ -3,12 +3,10 @@
 package libvirt
 
 import (
-	"encoding/xml"
 	"fmt"
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
-	lv "libvirt.org/go/libvirt"
 
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector"
 )
@@ -48,32 +46,6 @@ type DomainInterfaceStats struct {
 	TxPackets int64
 	RxErrs    int64
 	TxErrs    int64
-}
-
-// xmlDomain is used to parse domain XML for device discovery.
-type xmlDomain struct {
-	Devices xmlDevices `xml:"devices"`
-}
-
-type xmlDevices struct {
-	Disks      []xmlDisk      `xml:"disk"`
-	Interfaces []xmlInterface `xml:"interface"`
-}
-
-type xmlDisk struct {
-	Target xmlDiskTarget `xml:"target"`
-}
-
-type xmlDiskTarget struct {
-	Dev string `xml:"dev,attr"`
-}
-
-type xmlInterface struct {
-	Target xmlInterfaceTarget `xml:"target"`
-}
-
-type xmlInterfaceTarget struct {
-	Dev string `xml:"dev,attr"`
 }
 
 // memoryStatTagNames maps libvirt memory stat tags to human-readable names.
@@ -135,11 +107,8 @@ type libvirtCollector struct {
 	domainNetTxErrors  *prometheus.Desc
 }
 
-// Compile-time interface checks.
-var (
-	_ collector.Collector = (*libvirtCollector)(nil)
-	_ LibvirtClient       = (*libvirtClient)(nil)
-)
+// Compile-time interface check.
+var _ collector.Collector = (*libvirtCollector)(nil)
 
 // New returns a libvirt collector that connects to libvirtd on each collect.
 func New(uri string) collector.Collector {
@@ -404,238 +373,3 @@ func (c *libvirtCollector) collectDomainInterfaceStats(ch chan<- prometheus.Metr
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Real libvirt client implementation
-// ---------------------------------------------------------------------------
-
-// libvirtClient implements LibvirtClient by connecting to libvirtd.
-type libvirtClient struct {
-	uri string
-}
-
-func (c *libvirtClient) connect() (*lv.Connect, error) {
-	conn, err := lv.NewConnect(c.uri)
-	if err != nil {
-		return nil, fmt.Errorf("libvirt connect %s: %w", c.uri, err)
-	}
-	return conn, nil
-}
-
-func (c *libvirtClient) IsAvailable() bool {
-	conn, err := c.connect()
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
-}
-
-func (c *libvirtClient) GetHostCPUCount() (uint, error) {
-	conn, err := c.connect()
-	if err != nil {
-		return 0, err
-	}
-	defer conn.Close()
-
-	info, err := conn.GetNodeInfo()
-	if err != nil {
-		return 0, fmt.Errorf("get node info: %w", err)
-	}
-	return info.Cpus, nil
-}
-
-func (c *libvirtClient) GetHostMemoryBytes() (uint64, error) {
-	conn, err := c.connect()
-	if err != nil {
-		return 0, err
-	}
-	defer conn.Close()
-
-	info, err := conn.GetNodeInfo()
-	if err != nil {
-		return 0, fmt.Errorf("get node info: %w", err)
-	}
-	// NodeInfo.Memory is in KiB.
-	return info.Memory * 1024, nil
-}
-
-func (c *libvirtClient) GetHostFreeMemoryBytes() (uint64, error) {
-	conn, err := c.connect()
-	if err != nil {
-		return 0, err
-	}
-	defer conn.Close()
-
-	free, err := conn.GetFreeMemory()
-	if err != nil {
-		return 0, fmt.Errorf("get free memory: %w", err)
-	}
-	return free, nil
-}
-
-func (c *libvirtClient) ListDomains() ([]DomainInfo, error) {
-	conn, err := c.connect()
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	domains, err := conn.ListAllDomains(lv.CONNECT_LIST_DOMAINS_ACTIVE | lv.CONNECT_LIST_DOMAINS_INACTIVE)
-	if err != nil {
-		return nil, fmt.Errorf("list domains: %w", err)
-	}
-
-	var result []DomainInfo
-	for _, dom := range domains {
-		name, err := dom.GetName()
-		if err != nil {
-			dom.Free()
-			continue
-		}
-		uuid, err := dom.GetUUIDString()
-		if err != nil {
-			dom.Free()
-			continue
-		}
-		info, err := dom.GetInfo()
-		if err != nil {
-			dom.Free()
-			continue
-		}
-
-		result = append(result, DomainInfo{
-			Name:      name,
-			UUID:      uuid,
-			State:     uint8(info.State),
-			MaxMemory: info.MaxMem * 1024, // KiB to bytes
-			Memory:    info.Memory * 1024,  // KiB to bytes
-			NrVirtCPU: info.NrVirtCpu,
-			CPUTime:   info.CpuTime,
-		})
-		dom.Free()
-	}
-
-	return result, nil
-}
-
-func (c *libvirtClient) GetDomainMemoryStats(name string) ([]DomainMemoryStat, error) {
-	conn, err := c.connect()
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	dom, err := conn.LookupDomainByName(name)
-	if err != nil {
-		return nil, fmt.Errorf("lookup domain %s: %w", name, err)
-	}
-	defer dom.Free()
-
-	stats, err := dom.MemoryStats(uint32(lv.DOMAIN_MEMORY_STAT_NR), 0)
-	if err != nil {
-		return nil, fmt.Errorf("memory stats %s: %w", name, err)
-	}
-
-	var result []DomainMemoryStat
-	for _, s := range stats {
-		result = append(result, DomainMemoryStat{
-			Tag: int32(s.Tag),
-			Val: s.Val,
-		})
-	}
-	return result, nil
-}
-
-func (c *libvirtClient) GetDomainBlockStats(name string) ([]DomainBlockStats, error) {
-	conn, err := c.connect()
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	dom, err := conn.LookupDomainByName(name)
-	if err != nil {
-		return nil, fmt.Errorf("lookup domain %s: %w", name, err)
-	}
-	defer dom.Free()
-
-	xmlDesc, err := dom.GetXMLDesc(0)
-	if err != nil {
-		return nil, fmt.Errorf("get xml desc %s: %w", name, err)
-	}
-
-	var domXML xmlDomain
-	if err := xml.Unmarshal([]byte(xmlDesc), &domXML); err != nil {
-		return nil, fmt.Errorf("parse xml %s: %w", name, err)
-	}
-
-	var result []DomainBlockStats
-	for _, disk := range domXML.Devices.Disks {
-		dev := disk.Target.Dev
-		if dev == "" {
-			continue
-		}
-		bs, err := dom.BlockStats(dev)
-		if err != nil {
-			slog.Debug("failed to get block stats for device", "domain", name, "device", dev, "error", err)
-			continue
-		}
-		result = append(result, DomainBlockStats{
-			Device:  dev,
-			RdBytes: bs.RdBytes,
-			WrBytes: bs.WrBytes,
-			RdReq:   bs.RdReq,
-			WrReq:   bs.WrReq,
-		})
-	}
-
-	return result, nil
-}
-
-func (c *libvirtClient) GetDomainInterfaceStats(name string) ([]DomainInterfaceStats, error) {
-	conn, err := c.connect()
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	dom, err := conn.LookupDomainByName(name)
-	if err != nil {
-		return nil, fmt.Errorf("lookup domain %s: %w", name, err)
-	}
-	defer dom.Free()
-
-	xmlDesc, err := dom.GetXMLDesc(0)
-	if err != nil {
-		return nil, fmt.Errorf("get xml desc %s: %w", name, err)
-	}
-
-	var domXML xmlDomain
-	if err := xml.Unmarshal([]byte(xmlDesc), &domXML); err != nil {
-		return nil, fmt.Errorf("parse xml %s: %w", name, err)
-	}
-
-	var result []DomainInterfaceStats
-	for _, iface := range domXML.Devices.Interfaces {
-		dev := iface.Target.Dev
-		if dev == "" {
-			continue
-		}
-		is, err := dom.InterfaceStats(dev)
-		if err != nil {
-			slog.Debug("failed to get interface stats for device", "domain", name, "interface", dev, "error", err)
-			continue
-		}
-		result = append(result, DomainInterfaceStats{
-			Name:      dev,
-			RxBytes:   is.RxBytes,
-			TxBytes:   is.TxBytes,
-			RxPackets: is.RxPackets,
-			TxPackets: is.TxPackets,
-			RxErrs:    is.RxErrs,
-			TxErrs:    is.TxErrs,
-		})
-	}
-
-	return result, nil
-}
