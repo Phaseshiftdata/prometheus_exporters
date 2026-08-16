@@ -213,6 +213,18 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator(".main")).toContainText("hostNetwork");
   });
 
+  test("network exporter page has correct docker run requirements", async ({ page }) => {
+    await page.goto("./#/network-exporter");
+    await expect(page.locator(".main")).toContainText("--network=host");
+    await expect(page.locator(".main")).toContainText("--pid=host");
+    await expect(page.locator(".main")).toContainText("--user 0:0");
+    await expect(page.locator(".main")).toContainText("--cap-add=NET_ADMIN");
+    await expect(page.locator(".main")).toContainText("--cap-add=DAC_READ_SEARCH");
+    await expect(page.locator(".main")).toContainText("--security-opt label=disable");
+    await expect(page.locator(".main")).toContainText("/host/proc");
+    await expect(page.locator(".main")).toContainText("/host/sys");
+  });
+
   test("network exporter page has failure modes section", async ({ page }) => {
     await page.goto("./#/network-exporter");
     await expect(page.locator(".main")).toContainText("Failure Modes");
@@ -270,6 +282,19 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator(".main")).toContainText("VICI socket unavailable");
     await expect(page.locator(".main")).toContainText("ContinueOnError");
     await expect(page.locator(".main")).toContainText("ipsec_up 0");
+  });
+
+  test("ipsec exporter page has correct docker run requirements", async ({ page }) => {
+    await page.goto("./#/ipsec-exporter");
+    await expect(page.locator(".main")).toContainText("--network=host");
+    await expect(page.locator(".main")).toContainText("--pid=host");
+    await expect(page.locator(".main")).toContainText("--user 0:0");
+    await expect(page.locator(".main")).toContainText("--cap-add=NET_ADMIN");
+    await expect(page.locator(".main")).toContainText("--cap-add=DAC_READ_SEARCH");
+    await expect(page.locator(".main")).toContainText("--security-opt label=disable");
+    await expect(page.locator(".main")).toContainText("/host/proc");
+    await expect(page.locator(".main")).toContainText("/host/sys");
+    await expect(page.locator(".main")).toContainText("/var/run/charon.vici");
   });
 
   test("ipsec exporter page has tunnel auto-discovery section", async ({ page }) => {

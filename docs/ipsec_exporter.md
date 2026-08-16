@@ -48,31 +48,41 @@ ghcr.io/phaseshiftdata/ipsec_exporter
 ### Docker
 
 ```bash
-docker run -d \
+docker run -d --rm \
   --name ipsec_exporter \
-  --network host \
-  -v /var/run/charon.vici:/var/run/charon.vici:ro \
+  --network=host --pid=host \
+  --user 0:0 \
+  --cap-add=NET_ADMIN \
+  --cap-add=DAC_READ_SEARCH \
+  --security-opt label=disable \
   -v /proc:/host/proc:ro \
   -v /sys:/host/sys:ro \
+  -v /var/run/charon.vici:/var/run/charon.vici:ro \
   ghcr.io/phaseshiftdata/ipsec_exporter:main \
-  --proc-path /host/proc \
-  --sys-path /host/sys
+  --proc-path=/host/proc \
+  --sys-path=/host/sys \
+  --vici-socket=/var/run/charon.vici \
+  --listen-address=0.0.0.0:9100
 ```
 
 ### Host Requirements
 
-The container requires access to several host resources:
+The container requires access to several host resources. It must run as
+root (`--user 0:0`) because reading procfs entries of other processes and
+querying nftables counters require root privileges. The default
+distroless UID 65532 is not sufficient.
 
-| Resource | Mount | Purpose |
+| Resource | Mount / Flag | Purpose |
 | --- | --- | --- |
-| VICI socket | `/var/run/charon.vici` | IPsec SA enumeration and charon statistics |
-| procfs | `/proc` (or remapped via `--proc-path`) | Network Graph and Conntrack collectors |
-| sysfs | `/sys` (or remapped via `--sys-path`) | Interface classification collector |
-| CAP_NET_ADMIN | capability | Firewall collector (nf_tables netlink) |
-
-The ARP and Conntrack collectors also require netlink access, which is
-available when the container runs with `--network host` or with the
-appropriate Linux capabilities.
+| VICI socket | `-v /var/run/charon.vici:/var/run/charon.vici:ro` | IPsec SA enumeration and charon statistics |
+| procfs | `-v /proc:/host/proc:ro` + `--proc-path=/host/proc` | Network Graph and Conntrack collectors |
+| sysfs | `-v /sys:/host/sys:ro` + `--sys-path=/host/sys` | Interface classification collector |
+| Host PID namespace | `--pid=host` | Required to see the host's `/proc/net/` rather than the container's |
+| Host network namespace | `--network=host` | Required so netlink sockets operate in the host's network namespace |
+| Root user | `--user 0:0` | Required for reading procfs entries of other processes and nftables counters |
+| `CAP_NET_ADMIN` | `--cap-add=NET_ADMIN` | Firewall collector (nf_tables netlink), conntrack flow queries, neighbor table access |
+| `CAP_DAC_READ_SEARCH` | `--cap-add=DAC_READ_SEARCH` | Reading `/proc` entries of other processes |
+| SELinux label disable | `--security-opt label=disable` | Required on SELinux hosts to read host procfs and sysfs mounts |
 
 ## Configuration
 
@@ -313,9 +323,14 @@ spec:
             - containerPort: 9100
               hostPort: 9100
           securityContext:
+            runAsUser: 0
+            runAsGroup: 0
             capabilities:
               add:
                 - NET_ADMIN
+                - DAC_READ_SEARCH
+            seLinuxOptions:
+              type: spc_t
           volumeMounts:
             - name: proc
               mountPath: /host/proc

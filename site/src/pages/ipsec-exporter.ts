@@ -149,19 +149,28 @@ export function IpsecExporterPage(): string {
       <p>Container images are published to GitHub Container Registry:</p>
       <pre><code>ghcr.io/phaseshiftdata/ipsec_exporter</code></pre>
       <pre><code># Run on an IPsec termination host
-docker run -d \\
+docker run -d --rm \\
   --name ipsec_exporter \\
-  --network host \\
-  -v /var/run/charon.vici:/var/run/charon.vici:ro \\
+  --network=host --pid=host \\
+  --user 0:0 \\
+  --cap-add=NET_ADMIN \\
+  --cap-add=DAC_READ_SEARCH \\
+  --security-opt label=disable \\
   -v /proc:/host/proc:ro \\
   -v /sys:/host/sys:ro \\
+  -v /var/run/charon.vici:/var/run/charon.vici:ro \\
   ghcr.io/phaseshiftdata/ipsec_exporter:main \\
-  --proc-path /host/proc \\
-  --sys-path /host/sys</code></pre>
+  --proc-path=/host/proc \\
+  --sys-path=/host/sys \\
+  --vici-socket=/var/run/charon.vici \\
+  --listen-address=0.0.0.0:9100</code></pre>
       <p>
         The container requires access to the host's VICI socket, procfs, and sysfs.
-        Running with <code>--network host</code> provides the netlink access needed by
-        the ARP, Conntrack, and Firewall collectors.
+        It must run as root (<code>--user 0:0</code>) because reading procfs entries
+        of other processes and querying nftables counters require root privileges.
+        The <code>--network=host</code> and <code>--pid=host</code> flags provide
+        access to the host's network and PID namespaces. On SELinux hosts,
+        <code>--security-opt label=disable</code> is required.
       </p>
     </div>
 
@@ -259,13 +268,23 @@ docker run -d \\
     <div class="section">
       <h2>Deployment</h2>
       <h3>Host Requirements</h3>
+      <p>
+        The exporter must run as root (<code>--user 0:0</code>) because reading
+        procfs entries of other processes and querying nftables counters require
+        root privileges. The default distroless UID 65532 is not sufficient.
+      </p>
       <table>
-        <thead><tr><th>Resource</th><th>Mount</th><th>Purpose</th></tr></thead>
+        <thead><tr><th>Resource</th><th>Mount / Flag</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td>VICI socket</td><td><code>/var/run/charon.vici</code></td><td>IPsec SA enumeration and charon statistics</td></tr>
-          <tr><td>procfs</td><td><code>/proc</code></td><td>Network Graph and Conntrack collectors</td></tr>
-          <tr><td>sysfs</td><td><code>/sys</code></td><td>Interface classification collector</td></tr>
-          <tr><td>CAP_NET_ADMIN</td><td><em>capability</em></td><td>Firewall collector (nf_tables netlink)</td></tr>
+          <tr><td>VICI socket</td><td><code>-v /var/run/charon.vici:/var/run/charon.vici:ro</code></td><td>IPsec SA enumeration and charon statistics</td></tr>
+          <tr><td>procfs</td><td><code>-v /proc:/host/proc:ro</code> + <code>--proc-path=/host/proc</code></td><td>Network Graph and Conntrack collectors</td></tr>
+          <tr><td>sysfs</td><td><code>-v /sys:/host/sys:ro</code> + <code>--sys-path=/host/sys</code></td><td>Interface classification collector</td></tr>
+          <tr><td>Host PID namespace</td><td><code>--pid=host</code></td><td>Required to see the host's <code>/proc/net/</code></td></tr>
+          <tr><td>Host network namespace</td><td><code>--network=host</code></td><td>Required for netlink sockets in host network namespace</td></tr>
+          <tr><td>Root user</td><td><code>--user 0:0</code></td><td>Required for procfs access and nftables counters</td></tr>
+          <tr><td>CAP_NET_ADMIN</td><td><code>--cap-add=NET_ADMIN</code></td><td>Firewall collector (nf_tables netlink), conntrack, neighbor table</td></tr>
+          <tr><td>CAP_DAC_READ_SEARCH</td><td><code>--cap-add=DAC_READ_SEARCH</code></td><td>Reading <code>/proc</code> entries of other processes</td></tr>
+          <tr><td>SELinux label disable</td><td><code>--security-opt label=disable</code></td><td>Required on SELinux hosts for procfs/sysfs access</td></tr>
         </tbody>
       </table>
 
@@ -302,9 +321,14 @@ spec:
             - containerPort: 9100
               hostPort: 9100
           securityContext:
+            runAsUser: 0
+            runAsGroup: 0
             capabilities:
               add:
                 - NET_ADMIN
+                - DAC_READ_SEARCH
+            seLinuxOptions:
+              type: spc_t
           volumeMounts:
             - name: proc
               mountPath: /host/proc

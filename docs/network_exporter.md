@@ -71,12 +71,13 @@ ghcr.io/phaseshiftdata/network_exporter
 ### Docker
 
 ```bash
-docker run -d \
+docker run -d --rm \
   --name network_exporter \
-  -p 9100:9100 \
-  --pid=host \
-  --network=host \
+  --network=host --pid=host \
+  --user 0:0 \
   --cap-add=NET_ADMIN \
+  --cap-add=DAC_READ_SEARCH \
+  --security-opt label=disable \
   -v /proc:/host/proc:ro \
   -v /sys:/host/sys:ro \
   ghcr.io/phaseshiftdata/network_exporter:main \
@@ -87,15 +88,20 @@ docker run -d \
 
 ### Host Requirements
 
-The exporter needs access to the host's kernel state:
+The exporter needs access to the host's kernel state. It must run as
+root (`--user 0:0`) because reading procfs entries of other processes and
+querying nftables counters require root privileges.
 
 | Requirement | Reason |
 | --- | --- |
-| **procfs mount** (`/proc`) | The netgraph and conntrack collectors parse `/proc/net/tcp` and `/proc/net/udp` to discover connections. |
-| **sysfs mount** (`/sys`) | The iface collector reads `/sys/class/net/` to classify interfaces. |
+| **procfs mount** (`/proc` -> `/host/proc`) | The netgraph and conntrack collectors parse `/proc/net/tcp` and `/proc/net/udp` to discover connections. |
+| **sysfs mount** (`/sys` -> `/host/sys`) | The iface collector reads `/sys/class/net/` to classify interfaces. |
 | **Host PID namespace** (`--pid=host`) | Required to see the host's `/proc/net/` rather than the container's. |
 | **Host network namespace** (`--network=host`) | Required so netlink sockets operate in the host's network namespace. |
+| **Root user** (`--user 0:0`) | Required for reading procfs entries of other processes and querying nftables counters. The default distroless UID 65532 is not sufficient. |
 | **`CAP_NET_ADMIN`** | Required by `NETLINK_NETFILTER` for conntrack flow queries and nftables rule/counter reads. Also used by `NETLINK_ROUTE` for neighbor table access. |
+| **`CAP_DAC_READ_SEARCH`** | Required for reading `/proc` entries of other processes. |
+| **`--security-opt label=disable`** | Required on SELinux hosts to allow the container to read host procfs and sysfs mounts. |
 
 ## Configuration
 
@@ -316,9 +322,14 @@ spec:
             - containerPort: 9100
               hostPort: 9100
           securityContext:
+            runAsUser: 0
+            runAsGroup: 0
             capabilities:
               add:
                 - NET_ADMIN
+                - DAC_READ_SEARCH
+            seLinuxOptions:
+              type: spc_t
           volumeMounts:
             - name: proc
               mountPath: /host/proc
@@ -354,8 +365,12 @@ services:
     image: ghcr.io/phaseshiftdata/network_exporter:main
     pid: host
     network_mode: host
+    user: "0:0"
     cap_add:
       - NET_ADMIN
+      - DAC_READ_SEARCH
+    security_opt:
+      - label=disable
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
