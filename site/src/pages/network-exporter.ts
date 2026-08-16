@@ -113,12 +113,13 @@ export function NetworkExporterPage(): string {
       <p>Container images are published to GitHub Container Registry:</p>
       <pre><code>ghcr.io/phaseshiftdata/network_exporter</code></pre>
       <pre><code># Run with host procfs/sysfs access
-docker run -d \\
+docker run -d --rm \\
   --name network_exporter \\
-  -p 9100:9100 \\
-  --pid=host \\
-  --network=host \\
+  --network=host --pid=host \\
+  --user 0:0 \\
   --cap-add=NET_ADMIN \\
+  --cap-add=DAC_READ_SEARCH \\
+  --security-opt label=disable \\
   -v /proc:/host/proc:ro \\
   -v /sys:/host/sys:ro \\
   ghcr.io/phaseshiftdata/network_exporter:main \\
@@ -127,14 +128,22 @@ docker run -d \\
   --listen-address=0.0.0.0:9100</code></pre>
 
       <h3>Host Requirements</h3>
+      <p>
+        The exporter must run as root (<code>--user 0:0</code>) because reading
+        procfs entries of other processes and querying nftables counters require
+        root privileges. The default distroless UID 65532 is not sufficient.
+      </p>
       <table>
         <thead><tr><th>Requirement</th><th>Reason</th></tr></thead>
         <tbody>
-          <tr><td><strong>procfs mount</strong></td><td>The netgraph and conntrack collectors parse <code>/proc/net/tcp</code> and <code>/proc/net/udp</code> to discover connections.</td></tr>
-          <tr><td><strong>sysfs mount</strong></td><td>The iface collector reads <code>/sys/class/net/</code> to classify interfaces.</td></tr>
-          <tr><td><strong>Host PID namespace</strong></td><td>Required to see the host's <code>/proc/net/</code> rather than the container's.</td></tr>
-          <tr><td><strong>Host network namespace</strong></td><td>Required so netlink sockets operate in the host's network namespace.</td></tr>
+          <tr><td><strong>procfs mount</strong> (<code>/proc</code> &rarr; <code>/host/proc</code>)</td><td>The netgraph and conntrack collectors parse <code>/proc/net/tcp</code> and <code>/proc/net/udp</code> to discover connections.</td></tr>
+          <tr><td><strong>sysfs mount</strong> (<code>/sys</code> &rarr; <code>/host/sys</code>)</td><td>The iface collector reads <code>/sys/class/net/</code> to classify interfaces.</td></tr>
+          <tr><td><strong>Host PID namespace</strong> (<code>--pid=host</code>)</td><td>Required to see the host's <code>/proc/net/</code> rather than the container's.</td></tr>
+          <tr><td><strong>Host network namespace</strong> (<code>--network=host</code>)</td><td>Required so netlink sockets operate in the host's network namespace.</td></tr>
+          <tr><td><strong>Root user</strong> (<code>--user 0:0</code>)</td><td>Required for reading procfs entries of other processes and querying nftables counters.</td></tr>
           <tr><td><strong><code>CAP_NET_ADMIN</code></strong></td><td>Required by <code>NETLINK_NETFILTER</code> for conntrack flow queries and nftables rule/counter reads.</td></tr>
+          <tr><td><strong><code>CAP_DAC_READ_SEARCH</code></strong></td><td>Required for reading <code>/proc</code> entries of other processes.</td></tr>
+          <tr><td><strong><code>--security-opt label=disable</code></strong></td><td>Required on SELinux hosts to allow the container to read host procfs and sysfs mounts.</td></tr>
         </tbody>
       </table>
     </div>
@@ -262,9 +271,14 @@ spec:
             - containerPort: 9100
               hostPort: 9100
           securityContext:
+            runAsUser: 0
+            runAsGroup: 0
             capabilities:
               add:
                 - NET_ADMIN
+                - DAC_READ_SEARCH
+            seLinuxOptions:
+              type: spc_t
           volumeMounts:
             - name: proc
               mountPath: /host/proc
