@@ -204,7 +204,7 @@ func TestClassifyRule(t *testing.T) {
 }
 
 // TestDropRejectRulesNumbersByChainPosition pins the label semantics that
-// dashboards were built against: an uncommented rule is labelled with its
+// dashboards were built against: an uncommented rule is labeled with its
 // position among ALL rules in its chain, not among the drop rules.
 func TestDropRejectRulesNumbersByChainPosition(t *testing.T) {
 	chain := testChain(nftables.TableFamilyIPv4, "filter", "input", nil)
@@ -259,7 +259,7 @@ func TestChainPoliciesSkipsChainsWithoutOne(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Reader behaviour against a fake connection
+// Reader behavior against a fake connection
 // ---------------------------------------------------------------------------
 
 func TestGetDropRejectRulesWalksEveryChain(t *testing.T) {
@@ -581,7 +581,7 @@ func TestDecodeRuleDump(t *testing.T) {
 	// said the chain belongs to, not from the rule dump's own nfgenmsg. That is
 	// deliberate -- a rule's family is a property of its table, and taking it
 	// from the chain is the only way a rule with no counters and no comment
-	// still gets labelled consistently with its neighbours.
+	// still gets labeled consistently with its neighbors.
 	want := []RuleInfo{
 		{Family: "inet", Table: "filter", Chain: "input", Rule: "block-ssh", Verdict: "drop", Packets: 673497, Bytes: 1838301216},
 		{Family: "inet", Table: "filter", Chain: "input", Rule: "2", Verdict: "reject", Packets: 42, Bytes: 2100},

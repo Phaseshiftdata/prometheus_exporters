@@ -51,7 +51,7 @@ type StoreWriter interface {
 // Anything beyond the budget is deferred, not dropped. The backfiller finds it
 // by asking the database which runs are still missing jobs, so the only effect
 // of a small budget is that a cold start fills in over hours instead of
-// minutes -- which is the intended behaviour, not a compromise.
+// minutes -- which is the intended behavior, not a compromise.
 const DefaultJobBudgetPerPoll = 50
 
 // Poller orchestrates periodic collection of GitHub data across all repos in an org.

@@ -106,7 +106,7 @@ func NewClient(auth *Auth) *Client {
 // Deliberately not updated from a secondary-limit 403, whose header says zero
 // while the real quota is nearly untouched. A pacer that reads this number
 // needs it to mean what it says; the secondary limit is about request rate, and
-// the defence against it is spacing requests out, not watching a counter.
+// the defense against it is spacing requests out, not watching a counter.
 func (c *Client) RateLimitRemaining() int {
 	return int(c.rateLimitRemaining.Load())
 }

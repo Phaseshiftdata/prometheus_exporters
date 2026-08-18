@@ -377,7 +377,7 @@ func TestClient_RateLimitRemaining(t *testing.T) {
 // A server that returns 403 forever used to hang Get() indefinitely: it slept
 // toward the reset timestamp and retried, with no ceiling and no log line. The
 // first poll never finished, poll_duration_seconds_count stayed at 0, and
-// nothing in the logs or metrics said why. Without this test that behaviour
+// nothing in the logs or metrics said why. Without this test that behavior
 // comes straight back, because it looks like correct backoff until you wait.
 func TestClient_Get_RateLimitGivesUpRatherThanHanging(t *testing.T) {
 	var requestCount atomic.Int32

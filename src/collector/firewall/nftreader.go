@@ -222,7 +222,7 @@ func dropRejectRules(chain *nftables.Chain, rules []*nftables.Rule) []RuleInfo {
 // arrives as its own expr.Reject. Both are terminal, so a rule has at most one
 // and the last-one-wins ordering here never actually arbitrates anything --
 // it only mirrors what the JSON parser this replaced did, so that a ruleset
-// which somehow carried both would still be labelled the same way.
+// which somehow carried both would still be labeled the same way.
 func classifyRule(rule *nftables.Rule) (verdict string, packets, bytes uint64) {
 	for _, e := range rule.Exprs {
 		switch ex := e.(type) {

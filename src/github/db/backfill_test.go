@@ -350,7 +350,7 @@ func TestIntegration_RunsMissingJobsIsPerRepoNewestFirstAndLimited(t *testing.T)
 		t.Fatalf("RunsMissingJobs: %v", err)
 	}
 	if len(pending) != 2 {
-		t.Fatalf("expected the limit to be honoured, got %d", len(pending))
+		t.Fatalf("expected the limit to be honored, got %d", len(pending))
 	}
 	if pending[0].RunID != 100 || pending[1].RunID != 101 {
 		t.Errorf("expected newest first (100, 101), got %d, %d", pending[0].RunID, pending[1].RunID)
