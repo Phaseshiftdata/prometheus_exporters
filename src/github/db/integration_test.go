@@ -14,7 +14,7 @@ import (
 // the migrations from an empty database lands in the same place as applying
 // them incrementally, and that a row on the ninetieth day is pruned while its
 // day survives in the rollup with the correct counts. Neither can be shown
-// against a mock -- the behaviour under test lives in PostgreSQL, in triggers
+// against a mock -- the behavior under test lives in PostgreSQL, in triggers
 // and in ON CONFLICT clauses, and a mock that records SQL strings would happily
 // agree with a migration that loses every row it touches. Three of the defects
 // migration 003 fixes were found by these tests and by nothing else.

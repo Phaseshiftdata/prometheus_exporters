@@ -42,7 +42,7 @@ type countingGitHub struct {
 	// jobsStatus, when non-zero, is returned instead of a page of jobs.
 	jobsStatus int
 	// etag, when set, makes the runs endpoint answer 304 to a conditional
-	// request -- the real behaviour the client's ETag cache relies on.
+	// request -- the real behavior the client's ETag cache relies on.
 	etag string
 }
 

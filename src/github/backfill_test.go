@@ -861,6 +861,6 @@ func TestBackfiller_RunTicksUntilCancelled(t *testing.T) {
 	// The pace is a property of the loop: in 40ms of 5ms ticks nothing can
 	// have issued more than a handful of requests, however deep the backlog.
 	if got := len(api.requests()); got > 10 {
-		t.Errorf("Run issued %d requests in 40ms; the interval is not being honoured", got)
+		t.Errorf("Run issued %d requests in 40ms; the interval is not being honored", got)
 	}
 }

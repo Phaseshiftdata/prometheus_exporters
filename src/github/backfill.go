@@ -186,7 +186,7 @@ func WithBackfillHorizon(d time.Duration) BackfillOption {
 	}
 }
 
-// NewBackfiller creates a Backfiller for one organisation.
+// NewBackfiller creates a Backfiller for one organization.
 func NewBackfiller(
 	client *Client, org string, metrics *Metrics, opts ...BackfillOption,
 ) *Backfiller {
@@ -207,9 +207,9 @@ func NewBackfiller(
 	return b
 }
 
-// Run ticks until the context is cancelled. Every tick issues at most one
+// Run ticks until the context is canceled. Every tick issues at most one
 // GitHub request, which is what makes the request rate a property of the loop
-// rather than of anything's good behaviour.
+// rather than of anything's good behavior.
 func (b *Backfiller) Run(ctx context.Context, store BackfillStore) error {
 	slog.Info("starting github backfiller",
 		"interval", b.interval, "horizon", b.horizon,
