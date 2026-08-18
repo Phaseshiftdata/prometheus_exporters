@@ -25,6 +25,9 @@ test.describe("site deployment verification", () => {
 
     await page.click('a[href="#/libvirt-exporter"]');
     await expect(page.locator(".main")).toContainText("Libvirt Exporter");
+
+    await page.click('a[href="#/relay-exporter"]');
+    await expect(page.locator(".main")).toContainText("Relay Exporter");
   });
 
   test("favicon.ico is served and returns valid response", async ({ request }) => {

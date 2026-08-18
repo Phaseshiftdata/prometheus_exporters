@@ -9,6 +9,7 @@ infrastructure, IPsec tunnels, and Cloudflare services.
 - **ipsec_exporter** - IPsec tunnel status and traffic metrics
 - **cloudflare_exporter** - Cloudflare analytics, Zero Trust, DNS, and certificate metrics
 - **libvirt_exporter** - Libvirt hypervisor and virtual machine metrics
+- **relay_exporter** - Prometheus metrics relay proxy for RFC 1918 targets
 
 ## Documentation
 
