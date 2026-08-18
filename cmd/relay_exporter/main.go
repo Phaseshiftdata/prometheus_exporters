@@ -277,7 +277,7 @@ func metricsHandler(allowedSource string, client *http.Client, sem chan struct{}
 			req.Header.Set("Authorization", auth)
 		}
 
-		resp, err := client.Do(req)
+		resp, err := client.Do(req) // CodeQL: go/request-forgery — intentional proxy; target IP is validated as RFC 1918 only (isRFC1918) and source IP is filtered (--allowed-source)
 		duration := time.Since(start)
 
 		if err != nil {
