@@ -29,6 +29,7 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator("body")).toContainText("ipsec_exporter");
     await expect(page.locator("body")).toContainText("cloudflare_exporter");
     await expect(page.locator("body")).toContainText("libvirt_exporter");
+    await expect(page.locator("body")).toContainText("relay_exporter");
   });
 
   test("navigation links are present and functional", async ({ page }) => {
@@ -475,5 +476,119 @@ test.describe("post-deployment verification", () => {
     await page.goto("./");
     await expect(page.locator("body")).toContainText("libvirt_exporter");
     await expect(page.locator("body")).toContainText("9177");
+  });
+
+  // Relay exporter page coverage
+  test("relay exporter page renders with content", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("Relay Exporter");
+    await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/relay_exporter");
+    await expect(page.locator("pre code").first()).toBeVisible();
+  });
+
+  test("relay exporter page has configuration flags", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("--listen-address");
+    await expect(page.locator(".main")).toContainText("--allowed-source");
+    await expect(page.locator(".main")).toContainText("--tls-cert-file");
+    await expect(page.locator(".main")).toContainText("--tls-key-file");
+    await expect(page.locator(".main")).toContainText("--ca-cert");
+    await expect(page.locator(".main")).toContainText("--tls-skip-verify");
+    await expect(page.locator(".main")).toContainText("--proxy-timeout");
+    await expect(page.locator(".main")).toContainText("--concurrent-requests");
+    await expect(page.locator(".main")).toContainText("--log-level");
+  });
+
+  test("relay exporter page has response format documentation", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("relay_response");
+    await expect(page.locator(".main")).toContainText("relay_target_response");
+    await expect(page.locator(".main")).toContainText("relay_target_http_status");
+    await expect(page.locator(".main")).toContainText("# HELP relay_response");
+    await expect(page.locator(".main")).toContainText("# TYPE relay_response gauge");
+  });
+
+  test("relay exporter page has RFC 1918 documentation", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("RFC 1918");
+    await expect(page.locator(".main")).toContainText("10.0.0.0/8");
+    await expect(page.locator(".main")).toContainText("172.16.0.0/12");
+    await expect(page.locator(".main")).toContainText("192.168.0.0/16");
+  });
+
+  test("relay exporter page has source IP filtering documentation", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("Source IP Filtering");
+    await expect(page.locator(".main")).toContainText("403 Forbidden");
+    await expect(page.locator(".main")).toContainText("refuses to start");
+  });
+
+  test("relay exporter page has HTTP status codes table", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("400");
+    await expect(page.locator(".main")).toContainText("403");
+    await expect(page.locator(".main")).toContainText("429");
+  });
+
+  test("relay exporter page has architecture section", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("Architecture");
+    await expect(page.locator(".main")).toContainText("relay_exporter");
+    await expect(page.locator(".main")).toContainText("Request Flow");
+  });
+
+  test("relay exporter page has TLS section", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("Relay Listener TLS");
+    await expect(page.locator(".main")).toContainText("Target Connection TLS");
+    await expect(page.locator(".main")).toContainText("tls=true");
+  });
+
+  test("relay exporter page has Prometheus configuration", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("relabel_configs");
+    await expect(page.locator(".main")).toContainText("__param_ip");
+    await expect(page.locator(".main")).toContainText("__param_port");
+    await expect(page.locator(".main")).toContainText("multi-target");
+  });
+
+  test("relay exporter page has endpoints section", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("/metrics");
+    await expect(page.locator(".main")).toContainText("/health");
+  });
+
+  test("relay exporter page has deployment section", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("Kubernetes");
+    await expect(page.locator(".main")).toContainText("Docker Compose");
+    await expect(page.locator(".main")).toContainText("Deployment");
+  });
+
+  test("relay exporter page has failure modes section", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("Failure Modes");
+    await expect(page.locator(".main")).toContainText("Target unreachable");
+    await expect(page.locator(".main")).toContainText("Proxy timeout");
+    await expect(page.locator(".main")).toContainText("Concurrent request limit");
+  });
+
+  test("relay exporter page has security section", async ({ page }) => {
+    await page.goto("./#/relay-exporter");
+    await expect(page.locator(".main")).toContainText("Security");
+    await expect(page.locator(".main")).toContainText("No open proxy");
+    await expect(page.locator(".main")).toContainText("Authorization forwarding");
+  });
+
+  test("home page lists relay_exporter and port 9100", async ({ page }) => {
+    await page.goto("./");
+    await expect(page.locator("body")).toContainText("relay_exporter");
+    await expect(page.locator("body")).toContainText("9100");
+  });
+
+  test("navigation to relay exporter page works", async ({ page }) => {
+    await page.goto("./");
+    await page.click('a[href="#/relay-exporter"]');
+    await expect(page.locator(".main")).toContainText("Relay Exporter");
   });
 });
