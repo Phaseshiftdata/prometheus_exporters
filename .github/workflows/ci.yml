@@ -160,6 +160,8 @@ jobs:
             docker run --rm --entrypoint /cloudflare_exporter "$IMAGE" --help 2>&1 || true
             echo "Container image verification passed"
           fi
+      - name: Run molecule container tests
+        run: go test -v -timeout 300s ./tests/container/...
       - name: Push container images
         if: github.event_name == 'push'
         run: make deploy
