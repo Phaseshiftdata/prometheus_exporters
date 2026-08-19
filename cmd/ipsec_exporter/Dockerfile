@@ -5,7 +5,7 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl && \
+    apt-get install -y --no-install-recommends ca-certificates curl libcap2-bin && \
     rm -rf /var/lib/apt/lists/*
 
 ARG GO_VERSION=1.26.6
@@ -28,6 +28,11 @@ RUN CGO_ENABLED=0 go build \
     -ldflags "-s -w -X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
     -o /ipsec_exporter \
     ./cmd/ipsec_exporter/
+
+# Set file capabilities so the binary can use NET_ADMIN and DAC_READ_SEARCH
+# as a non-root user. Same reasoning as network_exporter — the bounding set
+# from --cap-add is not inherited by a non-root process without file caps.
+RUN setcap cap_net_admin,cap_dac_read_search=+eip /ipsec_exporter
 
 # Runtime stage
 FROM gcr.io/distroless/static-debian12:nonroot

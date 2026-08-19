@@ -18,7 +18,9 @@ func TestNetworkExporter(t *testing.T) {
 	image := buildImage(t, networkDockerfile, networkImageTag)
 	hostPort := freePort(t)
 
-	containerID := runContainer(t, image, hostPort, networkPort,
+	containerID := runContainerWithOpts(t, image,
+		[]string{"--cap-add=NET_ADMIN", "--cap-add=DAC_READ_SEARCH"},
+		hostPort, networkPort,
 		"--listen-address=0.0.0.0:"+networkPort,
 		"--proc-path=/proc",
 		"--sys-path=/sys",
@@ -52,13 +54,13 @@ func TestNetworkExporter(t *testing.T) {
 func TestNetworkExporterVersionFlag(t *testing.T) {
 	skipIfNoDocker(t)
 	image := buildImage(t, networkDockerfile, networkImageTag)
-	testVersionFlag(t, image, "network_exporter")
+	testVersionFlag(t, image, "network_exporter", "--cap-add=NET_ADMIN", "--cap-add=DAC_READ_SEARCH")
 }
 
 func TestNetworkExporterHelpFlag(t *testing.T) {
 	skipIfNoDocker(t)
 	image := buildImage(t, networkDockerfile, networkImageTag)
-	testHelpFlag(t, image)
+	testHelpFlag(t, image, "--cap-add=NET_ADMIN", "--cap-add=DAC_READ_SEARCH")
 }
 
 func TestNetworkExporterNoShell(t *testing.T) {
