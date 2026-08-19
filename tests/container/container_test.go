@@ -13,15 +13,39 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
 
-// projectRoot is the absolute path to the repository root. The Dockerfiles
-// use the repo root as the build context.
-const projectRoot = "/home/claude/git/prometheus_exporters"
+// projectRoot returns the absolute path to the repository root. Detected
+// dynamically by walking up from the test file's directory until go.mod is found.
+var projectRoot = detectProjectRoot()
+
+func detectProjectRoot() string {
+	// Start from the current working directory.
+	dir, err := os.Getwd()
+	if err != nil {
+		// Fallback: walk up from this file.
+		dir = "."
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			abs, _ := filepath.Abs(dir)
+			return abs
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root without finding go.mod.
+			// Fall back to working directory.
+			abs, _ := filepath.Abs(".")
+			return abs
+		}
+		dir = parent
+	}
+}
 
 var (
 	dockerHost     string
@@ -59,20 +83,21 @@ func detectDockerHost(t *testing.T) string {
 
 // detectHostPathMapping discovers the filesystem path translation needed in
 // Docker-in-Docker environments. When this test process runs inside a
-// container, the /home/claude mount may map to a different host path. This
-// function inspects the current container's mounts to find the mapping.
+// container, the project root mount may map to a different path on the Docker
+// host. This function inspects the current container's mounts to find the mapping.
 func detectHostPathMapping(t *testing.T) {
 	t.Helper()
 	hostPathPrefixOnce.Do(func() {
-		// Find our container ID from /proc/self/cgroup or hostname.
+		// Find our container ID from hostname.
 		hostname, _ := os.Hostname()
+		homeDir, _ := os.UserHomeDir()
 		out, err := exec.Command("docker", "inspect", hostname,
-			"--format", `{{range .Mounts}}{{if eq .Destination "/home/claude"}}{{.Source}}{{end}}{{end}}`).CombinedOutput()
+			"--format", fmt.Sprintf(`{{range .Mounts}}{{if eq .Destination "%s"}}{{.Source}}{{end}}{{end}}`, homeDir)).CombinedOutput()
 		if err == nil {
 			src := strings.TrimSpace(string(out))
-			if src != "" && src != "/home/claude" {
+			if src != "" && src != homeDir {
 				hostPathPrefix = src
-				containerPrefix = "/home/claude"
+				containerPrefix = homeDir
 				return
 			}
 		}
