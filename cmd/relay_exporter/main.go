@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -263,17 +264,22 @@ func proxyHandler(allowedSource string, client *http.Client, sem chan struct{}, 
 			}
 		}
 
-		// Build target URL. The path is a constant; user input supplies
-		// only the scheme, ip, and port.
+		// Build target URL. The host and port come from validated
+		// query parameters (RFC 1918 only); the path is a compile-time
+		// constant per endpoint -- never derived from user input.
 		scheme := "http"
 		if useTLS {
 			scheme = "https"
 		}
-		targetURL := fmt.Sprintf("%s://%s:%d%s", scheme, ipStr, port, targetPath)
+		target := &url.URL{
+			Scheme: scheme,
+			Host:   net.JoinHostPort(ipStr, strconv.Itoa(port)),
+			Path:   targetPath,
+		}
 
 		// Proxy the request.
 		start := time.Now()
-		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, targetURL, nil)
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target.String(), nil)
 		if err != nil {
 			writeRelayResponse(w, "", 0, 0, time.Since(start))
 			return
@@ -284,11 +290,14 @@ func proxyHandler(allowedSource string, client *http.Client, sem chan struct{}, 
 			req.Header.Set("Authorization", auth)
 		}
 
-		resp, err := client.Do(req) // CodeQL: go/request-forgery -- intentional proxy; target IP is validated as RFC 1918 only (isRFC1918) and source IP is filtered (--allowed-source)
+		// Intentional proxy: target IP is validated as RFC 1918 only
+		// (isRFC1918), source IP is filtered (--allowed-source), and
+		// the target path is a compile-time constant per endpoint.
+		resp, err := client.Do(req) // codeql[go/request-forgery]
 		duration := time.Since(start)
 
 		if err != nil {
-			slog.Debug("proxy request failed", "target", targetURL, "error", err, "duration", duration)
+			slog.Debug("proxy request failed", "target", target.String(), "error", err, "duration", duration)
 			writeRelayResponse(w, "", 0, 0, duration)
 			return
 		}
@@ -296,12 +305,12 @@ func proxyHandler(allowedSource string, client *http.Client, sem chan struct{}, 
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			slog.Debug("reading target response failed", "target", targetURL, "error", err, "duration", duration)
+			slog.Debug("reading target response failed", "target", target.String(), "error", err, "duration", duration)
 			writeRelayResponse(w, "", 0, 0, duration)
 			return
 		}
 
-		slog.Debug("proxied request", "target", targetURL, "status", resp.StatusCode, "duration", duration)
+		slog.Debug("proxied request", "target", target.String(), "status", resp.StatusCode, "duration", duration)
 
 		targetSuccess := 0
 		if resp.StatusCode == http.StatusOK {
