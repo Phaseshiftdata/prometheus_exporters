@@ -172,16 +172,6 @@ func runContainerWithOpts(t *testing.T, image string, dockerArgs []string, hostP
 }
 
 // runContainerHostNetwork starts a container with --network=host. Because
-// host networking maps the host's loopback into the container, HTTP requests
-// from the test process reach the container at the Docker gateway IP. Returns
-// the container ID.
-func runContainerHostNetwork(t *testing.T, image string, dockerArgs []string, entrypointArgs ...string) string {
-	t.Helper()
-
-	allDockerArgs := append([]string{"--network=host"}, dockerArgs...)
-	return runContainerWithOpts(t, image, allDockerArgs, "", "", entrypointArgs...)
-}
-
 // runContainerForeground runs a container in the foreground and returns
 // combined stdout/stderr and the exit error. Useful for --version and --help.
 func runContainerForeground(t *testing.T, image string, args ...string) (string, error) {
