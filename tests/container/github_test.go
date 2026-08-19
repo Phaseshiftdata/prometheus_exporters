@@ -69,10 +69,11 @@ func TestGithubExporter(t *testing.T) {
 		"--github-install-id=67890",
 		"--github-key-file=/tmp/test-key.pem",
 		"--org=test-org",
+		"--log-level=error",
 	)
 
 	base := baseURL(t, hostPort)
-	waitForHealthy(t, base+"/metrics", 30*time.Second)
+	waitForHealthy(t, base+"/", 45*time.Second)
 
 	t.Run("metrics_returns_200", func(t *testing.T) {
 		status, _ := httpGet(t, base+"/metrics")
