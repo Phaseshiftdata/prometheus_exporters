@@ -4,10 +4,22 @@
 
 `relay_exporter` is a Prometheus metrics relay proxy for targets on
 RFC 1918 private networks. Prometheus scrapes the relay, which fetches
-`/metrics` from targets behind VPN tunnels or private networks that
+metrics from targets behind VPN tunnels or private networks that
 Prometheus cannot directly reach. The relay validates every request,
 enforces source IP filtering, and restricts targets to private address
 ranges so it cannot be used as an open proxy.
+
+Three proxy endpoints are available:
+
+| Endpoint | Proxies to | Returns |
+| --- | --- | --- |
+| `/metrics` | `/metrics` | Target's own telemetry (e.g. Alloy self-metrics) |
+| `/host` | `/api/v0/component/prometheus.exporter.unix.host/metrics` | Host metrics (`node_*`) from Grafana Alloy |
+| `/cadvisor` | `/api/v0/component/prometheus.exporter.cadvisor.containers/metrics` | Container metrics (`container_*`) from Grafana Alloy |
+
+All three endpoints share the same request contract, validation rules,
+and response format. The only difference is the constant path appended
+to the target URL.
 
 The relay always returns HTTP 200 to Prometheus when it is functioning
 correctly. The target's actual HTTP status and reachability are reported
@@ -20,10 +32,13 @@ Prometheus --> relay_exporter --> target (RFC 1918 host)
                 (network A)         (network B)
 ```
 
-1. Prometheus sends an HTTP(S) GET to `relay_exporter` at `/metrics`
-   with query parameters: `/metrics?ip=<target_ip>&port=<number>&tls=<true|false>`
+1. Prometheus sends an HTTP(S) GET to `relay_exporter` at `/metrics`,
+   `/host`, or `/cadvisor` with query parameters:
+   `/<endpoint>?ip=<target_ip>&port=<number>&tls=<true|false>`
 2. `relay_exporter` validates the request (source IP, target IP, port).
-3. `relay_exporter` proxies the request to `http(s)://<ip>:<port>/metrics`.
+3. `relay_exporter` proxies the request to the target at the constant
+   path for that endpoint (e.g. `http(s)://<ip>:<port>/metrics` for
+   `/metrics`, or the Alloy component path for `/host` and `/cadvisor`).
 4. `relay_exporter` returns HTTP 200 with the target's response body and
    relay status metrics appended.
 
@@ -86,8 +101,13 @@ error message if it is omitted.
 
 ## Proxy Behavior
 
-When validation passes, `relay_exporter` sends an HTTP GET to
-`http(s)://<ip>:<port>/metrics` on behalf of Prometheus.
+When validation passes, `relay_exporter` sends an HTTP GET to the
+target on behalf of Prometheus. The target path is a constant per
+endpoint:
+
+- `/metrics` proxies to `http(s)://<ip>:<port>/metrics`
+- `/host` proxies to `http(s)://<ip>:<port>/api/v0/component/prometheus.exporter.unix.host/metrics`
+- `/cadvisor` proxies to `http(s)://<ip>:<port>/api/v0/component/prometheus.exporter.cadvisor.containers/metrics`
 
 - HTTPS is used for the target connection when `tls=true`.
 - The `Authorization` header from the Prometheus request is forwarded
@@ -133,13 +153,14 @@ relay_target_http_status 0
 
 ## HTTP Status Codes
 
-| Scenario | Status Returned to Prometheus |
-| --- | --- |
-| Relay functioning, target responded (any status) | **200** (target status reported in `relay_target_http_status`) |
-| Relay functioning, target timed out or unreachable | **200** (with `relay_target_response 0`, `relay_target_http_status 0`) |
-| Source IP not allowed | **403** Forbidden |
-| Missing or invalid query parameters | **400** Bad Request |
-| Concurrent request limit exceeded | **429** Too Many Requests |
+| Scenario | Status Returned to Prometheus | `relay_target_response` | `relay_target_http_status` |
+| --- | --- | --- | --- |
+| Target responded with metrics | **200** | 1 | 200 |
+| Target component path returned 404 (`/host`, `/cadvisor`) | **200** | 0 | 404 |
+| Target timed out or unreachable | **200** | 0 | 0 |
+| Source IP not allowed | **403** | -- | -- |
+| Missing or invalid query parameters | **400** | -- | -- |
+| Concurrent request limit exceeded | **429** | -- | -- |
 
 The relay always returns HTTP 200 to Prometheus when it is functioning
 correctly. The target's actual HTTP status is reported via
@@ -197,11 +218,72 @@ In this configuration, Prometheus sends all scrape requests to the
 relay at `203.0.113.5:9100`, which proxies them to the private targets
 listed in `static_configs`.
 
+### Host Metrics via `/host`
+
+```yaml
+scrape_configs:
+  - job_name: edge_host
+    scrape_interval: 30s
+    metrics_path: /host
+    static_configs:
+      - targets:
+          - 10.0.0.1:9100
+        labels:
+          site: example
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: "([^:]+):(\\d+)"
+        target_label: __param_ip
+        replacement: "${1}"
+      - source_labels: [__address__]
+        regex: "([^:]+):(\\d+)"
+        target_label: __param_port
+        replacement: "${2}"
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: "203.0.113.5:9100"
+```
+
+### Container Metrics via `/cadvisor`
+
+```yaml
+scrape_configs:
+  - job_name: edge_cadvisor
+    scrape_interval: 30s
+    metrics_path: /cadvisor
+    static_configs:
+      - targets:
+          - 10.0.0.1:9100
+        labels:
+          site: example
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: "([^:]+):(\\d+)"
+        target_label: __param_ip
+        replacement: "${1}"
+      - source_labels: [__address__]
+        regex: "([^:]+):(\\d+)"
+        target_label: __param_port
+        replacement: "${2}"
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: "203.0.113.5:9100"
+```
+
+**Note:** Each endpoint emits the same `relay_*` gauge metrics. If the
+same device is scraped via `/metrics`, `/host`, and `/cadvisor` with
+identical labels, the `relay_*` series will collide. Use distinct
+`job_name` values per endpoint (as shown above) to avoid this.
+
 ## Endpoints
 
 | Path | Method | Description |
 | --- | --- | --- |
-| `/metrics?ip=...&port=...&tls=...` | GET | Proxy endpoint. Fetches metrics from the specified target and returns the response with relay status metrics appended. |
+| `/metrics?ip=...&port=...&tls=...` | GET | Proxy endpoint. Fetches `/metrics` from the target and returns the response with relay status metrics appended. |
+| `/host?ip=...&port=...&tls=...` | GET | Proxy endpoint. Fetches Grafana Alloy host metrics (`node_*`) from the target's `prometheus.exporter.unix.host` component. |
+| `/cadvisor?ip=...&port=...&tls=...` | GET | Proxy endpoint. Fetches Grafana Alloy container metrics (`container_*`) from the target's `prometheus.exporter.cadvisor.containers` component. |
 | `/health` | GET | Health and readiness check for liveness probes. |
 | `/` | GET | Landing page with links to other endpoints. |
 
@@ -288,8 +370,9 @@ prevents resource exhaustion when many targets are scraped simultaneously.
   IP addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`).
   Public IP addresses are rejected with HTTP 400.
 - **No open proxy:** The combination of source IP filtering, RFC 1918
-  target restriction, and fixed `/metrics` path prevents the relay
-  from being used as an open proxy.
+  target restriction, and fixed target paths (constants per endpoint)
+  prevents the relay from being used as an open proxy. There is no
+  user-controlled path parameter.
 - **Authorization forwarding:** The `Authorization` header is forwarded
   from Prometheus to the target, supporting bearer token authentication
   on targets.

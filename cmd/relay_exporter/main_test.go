@@ -1034,3 +1034,316 @@ func TestMetricsHandlerReadBodyError(t *testing.T) {
 		t.Error("expected relay_target_http_status 0 on read error")
 	}
 }
+
+// --- proxyHandler: target path constants ---
+
+func TestProxyHandlerTargetPaths(t *testing.T) {
+	tests := []struct {
+		name         string
+		endpoint     string
+		targetPath   string
+		expectedPath string
+	}{
+		{
+			name:         "metrics endpoint",
+			endpoint:     "/metrics",
+			targetPath:   "/metrics",
+			expectedPath: "/metrics",
+		},
+		{
+			name:         "host endpoint",
+			endpoint:     "/host",
+			targetPath:   "/api/v0/component/prometheus.exporter.unix.host/metrics",
+			expectedPath: "/api/v0/component/prometheus.exporter.unix.host/metrics",
+		},
+		{
+			name:         "cadvisor endpoint",
+			endpoint:     "/cadvisor",
+			targetPath:   "/api/v0/component/prometheus.exporter.cadvisor.containers/metrics",
+			expectedPath: "/api/v0/component/prometheus.exporter.cadvisor.containers/metrics",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPath string
+			sem := make(chan struct{}, 10)
+			client := &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					gotPath = r.URL.Path
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader("test_metric 1\n")),
+						Header:     make(http.Header),
+					}, nil
+				}),
+				Timeout: 5 * time.Second,
+			}
+			handler := proxyHandler("127.0.0.1", client, sem, tc.targetPath)
+
+			req := httptest.NewRequest("GET", tc.endpoint+"?ip=10.0.0.1&port=9100", nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			rr := httptest.NewRecorder()
+			handler(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Errorf("expected 200, got %d", rr.Code)
+			}
+			if gotPath != tc.expectedPath {
+				t.Errorf("expected target path %q, got %q", tc.expectedPath, gotPath)
+			}
+		})
+	}
+}
+
+// TestProxyHandlerPathQueryParameterIgnored verifies that a user-supplied
+// "path" query parameter does not influence the target URL.
+func TestProxyHandlerPathQueryParameterIgnored(t *testing.T) {
+	tests := []struct {
+		name         string
+		targetPath   string
+		queryPath    string
+		expectedPath string
+	}{
+		{
+			name:         "metrics ignores path param",
+			targetPath:   "/metrics",
+			queryPath:    "/etc/passwd",
+			expectedPath: "/metrics",
+		},
+		{
+			name:         "host ignores path param",
+			targetPath:   "/api/v0/component/prometheus.exporter.unix.host/metrics",
+			queryPath:    "/admin",
+			expectedPath: "/api/v0/component/prometheus.exporter.unix.host/metrics",
+		},
+		{
+			name:         "cadvisor ignores path param",
+			targetPath:   "/api/v0/component/prometheus.exporter.cadvisor.containers/metrics",
+			queryPath:    "/../../../etc/shadow",
+			expectedPath: "/api/v0/component/prometheus.exporter.cadvisor.containers/metrics",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPath string
+			sem := make(chan struct{}, 10)
+			client := &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					gotPath = r.URL.Path
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader("ok\n")),
+						Header:     make(http.Header),
+					}, nil
+				}),
+				Timeout: 5 * time.Second,
+			}
+			handler := proxyHandler("127.0.0.1", client, sem, tc.targetPath)
+
+			req := httptest.NewRequest("GET", "/endpoint?ip=10.0.0.1&port=9100&path="+tc.queryPath, nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			rr := httptest.NewRecorder()
+			handler(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Errorf("expected 200, got %d", rr.Code)
+			}
+			if gotPath != tc.expectedPath {
+				t.Errorf("path query param influenced target: got %q, want %q", gotPath, tc.expectedPath)
+			}
+		})
+	}
+}
+
+// TestProxyHandlerTLSScheme verifies that TLS parameter works for all endpoints.
+func TestProxyHandlerTLSScheme(t *testing.T) {
+	for _, targetPath := range []string{
+		"/metrics",
+		"/api/v0/component/prometheus.exporter.unix.host/metrics",
+		"/api/v0/component/prometheus.exporter.cadvisor.containers/metrics",
+	} {
+		t.Run("tls=true path="+targetPath, func(t *testing.T) {
+			var gotScheme string
+			sem := make(chan struct{}, 10)
+			client := &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					gotScheme = r.URL.Scheme
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader("ok\n")),
+						Header:     make(http.Header),
+					}, nil
+				}),
+				Timeout: 5 * time.Second,
+			}
+			handler := proxyHandler("127.0.0.1", client, sem, targetPath)
+
+			req := httptest.NewRequest("GET", "/endpoint?ip=10.0.0.1&port=9100&tls=true", nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			rr := httptest.NewRecorder()
+			handler(rr, req)
+
+			if gotScheme != "https" {
+				t.Errorf("expected https, got %q", gotScheme)
+			}
+		})
+	}
+}
+
+// --- Validation parity: /host and /cadvisor share the same validation as /metrics ---
+
+func TestHostAndCadvisorValidationParity(t *testing.T) {
+	endpoints := []struct {
+		name       string
+		targetPath string
+	}{
+		{"host", "/api/v0/component/prometheus.exporter.unix.host/metrics"},
+		{"cadvisor", "/api/v0/component/prometheus.exporter.cadvisor.containers/metrics"},
+	}
+
+	validationCases := []struct {
+		name   string
+		url    string
+		status int
+	}{
+		{"missing ip", "/endpoint?port=9100", http.StatusBadRequest},
+		{"missing port", "/endpoint?ip=10.0.0.1", http.StatusBadRequest},
+		{"invalid ip", "/endpoint?ip=not-an-ip&port=9100", http.StatusBadRequest},
+		{"public ip", "/endpoint?ip=203.0.113.1&port=9100", http.StatusBadRequest},
+		{"port 0", "/endpoint?ip=10.0.0.1&port=0", http.StatusBadRequest},
+		{"port 65536", "/endpoint?ip=10.0.0.1&port=65536", http.StatusBadRequest},
+		{"port abc", "/endpoint?ip=10.0.0.1&port=abc", http.StatusBadRequest},
+		{"invalid tls", "/endpoint?ip=10.0.0.1&port=9100&tls=maybe", http.StatusBadRequest},
+	}
+
+	for _, ep := range endpoints {
+		for _, vc := range validationCases {
+			t.Run(ep.name+"/"+vc.name, func(t *testing.T) {
+				sem := make(chan struct{}, 10)
+				handler := proxyHandler("127.0.0.1", &http.Client{Timeout: time.Second}, sem, ep.targetPath)
+
+				req := httptest.NewRequest("GET", vc.url, nil)
+				req.RemoteAddr = "127.0.0.1:12345"
+				rr := httptest.NewRecorder()
+				handler(rr, req)
+
+				if rr.Code != vc.status {
+					t.Errorf("expected %d, got %d", vc.status, rr.Code)
+				}
+			})
+		}
+	}
+}
+
+// TestHostAndCadvisorSourceIPDenied verifies source IP filtering on new endpoints.
+func TestHostAndCadvisorSourceIPDenied(t *testing.T) {
+	for _, targetPath := range []string{
+		"/api/v0/component/prometheus.exporter.unix.host/metrics",
+		"/api/v0/component/prometheus.exporter.cadvisor.containers/metrics",
+	} {
+		t.Run(targetPath, func(t *testing.T) {
+			sem := make(chan struct{}, 10)
+			handler := proxyHandler("192.168.1.1", &http.Client{Timeout: time.Second}, sem, targetPath)
+
+			req := httptest.NewRequest("GET", "/endpoint?ip=10.0.0.1&port=9100", nil)
+			req.RemoteAddr = "203.0.113.1:12345"
+			rr := httptest.NewRecorder()
+			handler(rr, req)
+
+			if rr.Code != http.StatusForbidden {
+				t.Errorf("expected 403, got %d", rr.Code)
+			}
+		})
+	}
+}
+
+// TestHostAndCadvisorConcurrencyLimit verifies concurrency limiting on new endpoints.
+func TestHostAndCadvisorConcurrencyLimit(t *testing.T) {
+	for _, targetPath := range []string{
+		"/api/v0/component/prometheus.exporter.unix.host/metrics",
+		"/api/v0/component/prometheus.exporter.cadvisor.containers/metrics",
+	} {
+		t.Run(targetPath, func(t *testing.T) {
+			sem := make(chan struct{}, 1)
+			sem <- struct{}{} // fill the semaphore
+
+			handler := proxyHandler("127.0.0.1", &http.Client{Timeout: time.Second}, sem, targetPath)
+
+			req := httptest.NewRequest("GET", "/endpoint?ip=10.0.0.1&port=9100", nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			rr := httptest.NewRecorder()
+			handler(rr, req)
+
+			if rr.Code != http.StatusTooManyRequests {
+				t.Errorf("expected 429, got %d", rr.Code)
+			}
+
+			<-sem
+		})
+	}
+}
+
+// --- 404 handling: target returns 404 for missing component ---
+
+func TestTarget404SurfacesInGauges(t *testing.T) {
+	sem := make(chan struct{}, 10)
+	client := &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Body:       io.NopCloser(strings.NewReader("404 page not found\n")),
+				Header:     make(http.Header),
+			}, nil
+		}),
+		Timeout: 5 * time.Second,
+	}
+
+	for _, targetPath := range []string{
+		"/api/v0/component/prometheus.exporter.unix.host/metrics",
+		"/api/v0/component/prometheus.exporter.cadvisor.containers/metrics",
+	} {
+		t.Run(targetPath, func(t *testing.T) {
+			handler := proxyHandler("127.0.0.1", client, sem, targetPath)
+
+			req := httptest.NewRequest("GET", "/endpoint?ip=10.0.0.1&port=9100", nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			rr := httptest.NewRecorder()
+			handler(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Errorf("expected 200 from relay, got %d", rr.Code)
+			}
+
+			body := rr.Body.String()
+			if !strings.Contains(body, "relay_response 1") {
+				t.Error("expected relay_response 1")
+			}
+			if !strings.Contains(body, "relay_target_response 0") {
+				t.Error("expected relay_target_response 0 for 404")
+			}
+			if !strings.Contains(body, "relay_target_http_status 404") {
+				t.Error("expected relay_target_http_status 404")
+			}
+			// The response must still contain relay_duration_seconds (valid Prometheus text).
+			if !strings.Contains(body, "relay_duration_seconds") {
+				t.Error("expected relay_duration_seconds in response")
+			}
+		})
+	}
+}
+
+// TestLandingPageLinksNewEndpoints verifies the landing page includes /host and /cadvisor.
+func TestLandingPageLinksNewEndpoints(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	landingHandler(rr, req)
+
+	body := rr.Body.String()
+	for _, link := range []string{"/metrics", "/host", "/cadvisor", "/health"} {
+		if !strings.Contains(body, link) {
+			t.Errorf("landing page should link to %s", link)
+		}
+	}
+}

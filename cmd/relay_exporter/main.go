@@ -116,7 +116,9 @@ func run(ctx context.Context, cfg config) error {
 	sem := make(chan struct{}, cfg.concurrentReqs)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/metrics", metricsHandler(cfg.allowedSource, client, sem))
+	mux.HandleFunc("/metrics", proxyHandler(cfg.allowedSource, client, sem, "/metrics"))
+	mux.HandleFunc("/host", proxyHandler(cfg.allowedSource, client, sem, "/api/v0/component/prometheus.exporter.unix.host/metrics"))
+	mux.HandleFunc("/cadvisor", proxyHandler(cfg.allowedSource, client, sem, "/api/v0/component/prometheus.exporter.cadvisor.containers/metrics"))
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/", landingHandler)
 
@@ -199,7 +201,11 @@ func extractSourceIP(remoteAddr string) string {
 	return host
 }
 
-func metricsHandler(allowedSource string, client *http.Client, sem chan struct{}) http.HandlerFunc {
+// proxyHandler returns an HTTP handler that validates the request, proxies it
+// to targetPath on the specified RFC 1918 host, and appends relay status
+// metrics. The targetPath is a compile-time constant per endpoint -- it is never
+// derived from user input.
+func proxyHandler(allowedSource string, client *http.Client, sem chan struct{}, targetPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check source IP.
 		sourceIP := extractSourceIP(r.RemoteAddr)
@@ -257,12 +263,13 @@ func metricsHandler(allowedSource string, client *http.Client, sem chan struct{}
 			}
 		}
 
-		// Build target URL.
+		// Build target URL. The path is a constant; user input supplies
+		// only the scheme, ip, and port.
 		scheme := "http"
 		if useTLS {
 			scheme = "https"
 		}
-		targetURL := fmt.Sprintf("%s://%s:%d/metrics", scheme, ipStr, port)
+		targetURL := fmt.Sprintf("%s://%s:%d%s", scheme, ipStr, port, targetPath)
 
 		// Proxy the request.
 		start := time.Now()
@@ -277,7 +284,7 @@ func metricsHandler(allowedSource string, client *http.Client, sem chan struct{}
 			req.Header.Set("Authorization", auth)
 		}
 
-		resp, err := client.Do(req) // CodeQL: go/request-forgery — intentional proxy; target IP is validated as RFC 1918 only (isRFC1918) and source IP is filtered (--allowed-source)
+		resp, err := client.Do(req) // CodeQL: go/request-forgery -- intentional proxy; target IP is validated as RFC 1918 only (isRFC1918) and source IP is filtered (--allowed-source)
 		duration := time.Since(start)
 
 		if err != nil {
@@ -302,6 +309,12 @@ func metricsHandler(allowedSource string, client *http.Client, sem chan struct{}
 		}
 		writeRelayResponse(w, string(body), targetSuccess, resp.StatusCode, duration)
 	}
+}
+
+// metricsHandler is kept for backward compatibility with tests.
+// It delegates to proxyHandler with the /metrics path.
+func metricsHandler(allowedSource string, client *http.Client, sem chan struct{}) http.HandlerFunc {
+	return proxyHandler(allowedSource, client, sem, "/metrics")
 }
 
 func writeRelayResponse(w http.ResponseWriter, targetBody string, targetSuccess int, targetHTTPStatus int, duration time.Duration) {
@@ -338,5 +351,5 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 func landingHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, `<html><head><title>Relay Exporter</title></head>
-<body><h1>Relay Exporter</h1><p><a href="/metrics">Metrics</a></p><p><a href="/health">Health</a></p></body></html>`)
+<body><h1>Relay Exporter</h1><p><a href="/metrics">Metrics</a></p><p><a href="/host">Host</a></p><p><a href="/cadvisor">cAdvisor</a></p><p><a href="/health">Health</a></p></body></html>`)
 }
