@@ -5,12 +5,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 )
 
 const (
