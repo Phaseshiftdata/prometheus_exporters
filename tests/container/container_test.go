@@ -50,13 +50,6 @@ func detectProjectRoot() string {
 var (
 	dockerHost     string
 	dockerHostOnce sync.Once
-
-	// hostPathPrefix caches the path translation needed for Docker-in-Docker
-	// environments where /home/claude inside this container maps to a
-	// different path on the Docker host.
-	hostPathPrefix     string
-	containerPrefix    string
-	hostPathPrefixOnce sync.Once
 )
 
 // detectDockerHost returns the IP address to use when contacting containers
@@ -79,43 +72,6 @@ func detectDockerHost(t *testing.T) string {
 		dockerHost = "127.0.0.1"
 	})
 	return dockerHost
-}
-
-// detectHostPathMapping discovers the filesystem path translation needed in
-// Docker-in-Docker environments. When this test process runs inside a
-// container, the project root mount may map to a different path on the Docker
-// host. This function inspects the current container's mounts to find the mapping.
-func detectHostPathMapping(t *testing.T) {
-	t.Helper()
-	hostPathPrefixOnce.Do(func() {
-		// Find our container ID from hostname.
-		hostname, _ := os.Hostname()
-		homeDir, _ := os.UserHomeDir()
-		out, err := exec.Command("docker", "inspect", hostname,
-			"--format", fmt.Sprintf(`{{range .Mounts}}{{if eq .Destination "%s"}}{{.Source}}{{end}}{{end}}`, homeDir)).CombinedOutput()
-		if err == nil {
-			src := strings.TrimSpace(string(out))
-			if src != "" && src != homeDir {
-				hostPathPrefix = src
-				containerPrefix = homeDir
-				return
-			}
-		}
-		// No translation needed.
-		hostPathPrefix = ""
-		containerPrefix = ""
-	})
-}
-
-// hostPath translates a path from this container's filesystem to the Docker
-// daemon's filesystem. In non-DinD environments this is a no-op.
-func hostPath(t *testing.T, p string) string {
-	t.Helper()
-	detectHostPathMapping(t)
-	if hostPathPrefix != "" && strings.HasPrefix(p, containerPrefix) {
-		return hostPathPrefix + p[len(containerPrefix):]
-	}
-	return p
 }
 
 // dockerAvailable returns true when `docker info` succeeds.
