@@ -1,4 +1,4 @@
-.PHONY: all setup clean lint test cover build deploy version version/major version/minor version/patch help
+.PHONY: all setup clean lint test cover build deploy molecule version version/major version/minor version/patch help
 
 PROJECT_NAME := prometheus_exporters
 VERSION_FILE := VERSION
@@ -115,6 +115,14 @@ deploy:
 	@echo "Deploy complete."
 
 # ============================================================================
+# Molecule - end-to-end container tests
+# ============================================================================
+molecule:
+	@echo "Running molecule container tests..."
+	go test -v -timeout 300s ./tests/container/...
+	@echo "Molecule tests passed."
+
+# ============================================================================
 # Version - semantic version tagging
 # ============================================================================
 LATEST_TAG := $(shell git tag -l 'v*' --sort=-version:refname | head -1)
@@ -185,6 +193,7 @@ help:
 	@echo "  build            Build container images tagged with policy"
 	@echo "  deploy           Push container images to GHCR"
 	@echo "  cover            Run test coverage and gate on 98%% threshold"
+	@echo "  molecule         Run molecule end-to-end container tests"
 	@echo "  version          Tag v0.0.0 if no semver tags exist, else bump patch"
 	@echo "  version/major    Bump major version and tag"
 	@echo "  version/minor    Bump minor version and tag"

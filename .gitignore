@@ -39,3 +39,4 @@ coverage.out
 # Environment
 .env
 .env.local
+.molecule-tmp*
