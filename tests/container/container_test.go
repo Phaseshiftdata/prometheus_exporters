@@ -281,12 +281,14 @@ func testCleanShutdown(t *testing.T, containerID string) {
 }
 
 // testVersionFlag verifies that the binary supports --version.
-func testVersionFlag(t *testing.T, image, binary string) {
+func testVersionFlag(t *testing.T, image, binary string, dockerArgs ...string) {
 	t.Helper()
 
-	out, _ := exec.Command("docker", "run", "--rm",
-		"--entrypoint", "/"+binary,
-		image, "--version").CombinedOutput()
+	args := []string{"run", "--rm"}
+	args = append(args, dockerArgs...)
+	args = append(args, "--entrypoint", "/"+binary, image, "--version")
+
+	out, _ := exec.Command("docker", args...).CombinedOutput()
 
 	combined := string(out)
 	if !strings.Contains(strings.ToLower(combined), "version") &&
@@ -297,11 +299,14 @@ func testVersionFlag(t *testing.T, image, binary string) {
 }
 
 // testHelpFlag verifies that the binary supports --help.
-func testHelpFlag(t *testing.T, image string) {
+func testHelpFlag(t *testing.T, image string, dockerArgs ...string) {
 	t.Helper()
 
-	out, _ := exec.Command("docker", "run", "--rm",
-		image, "--help").CombinedOutput()
+	args := []string{"run", "--rm"}
+	args = append(args, dockerArgs...)
+	args = append(args, image, "--help")
+
+	out, _ := exec.Command("docker", args...).CombinedOutput()
 
 	combined := string(out)
 	if !strings.Contains(strings.ToLower(combined), "usage") &&

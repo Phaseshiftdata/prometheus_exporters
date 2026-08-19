@@ -18,7 +18,9 @@ func TestIpsecExporter(t *testing.T) {
 	image := buildImage(t, ipsecDockerfile, ipsecImageTag)
 	hostPort := freePort(t)
 
-	containerID := runContainer(t, image, hostPort, ipsecPort,
+	containerID := runContainerWithOpts(t, image,
+		[]string{"--cap-add=NET_ADMIN", "--cap-add=DAC_READ_SEARCH"},
+		hostPort, ipsecPort,
 		"--listen-address=0.0.0.0:"+ipsecPort,
 		"--proc-path=/proc",
 		"--sys-path=/sys",
@@ -67,13 +69,13 @@ func TestIpsecExporter(t *testing.T) {
 func TestIpsecExporterVersionFlag(t *testing.T) {
 	skipIfNoDocker(t)
 	image := buildImage(t, ipsecDockerfile, ipsecImageTag)
-	testVersionFlag(t, image, "ipsec_exporter")
+	testVersionFlag(t, image, "ipsec_exporter", "--cap-add=NET_ADMIN", "--cap-add=DAC_READ_SEARCH")
 }
 
 func TestIpsecExporterHelpFlag(t *testing.T) {
 	skipIfNoDocker(t)
 	image := buildImage(t, ipsecDockerfile, ipsecImageTag)
-	testHelpFlag(t, image)
+	testHelpFlag(t, image, "--cap-add=NET_ADMIN", "--cap-add=DAC_READ_SEARCH")
 }
 
 func TestIpsecExporterNoShell(t *testing.T) {
