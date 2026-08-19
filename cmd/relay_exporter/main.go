@@ -264,16 +264,16 @@ func proxyHandler(allowedSource string, client *http.Client, sem chan struct{}, 
 			}
 		}
 
-		// Build target URL. The host and port come from validated
-		// query parameters (RFC 1918 only); the path is a compile-time
-		// constant per endpoint -- never derived from user input.
+		// Build target URL. The IP is re-derived from the parsed
+		// and RFC 1918-validated net.IP (not the raw query string),
+		// and the path is a compile-time constant per endpoint.
 		scheme := "http"
 		if useTLS {
 			scheme = "https"
 		}
 		target := &url.URL{
 			Scheme: scheme,
-			Host:   net.JoinHostPort(ipStr, strconv.Itoa(port)),
+			Host:   net.JoinHostPort(ip.String(), strconv.Itoa(port)),
 			Path:   targetPath,
 		}
 
