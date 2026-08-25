@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -422,6 +423,217 @@ func TestParseOpenBaoRef(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReadSecret_RequestCreationError(t *testing.T) {
+	// Create a client with a token but a deliberately broken address
+	// that causes http.NewRequest to fail.
+	c := &OpenBaoClient{
+		cfg: OpenBaoConfig{
+			// Address with control characters causes http.NewRequest to fail.
+			Address: "http://\x7f/",
+		},
+		client: &http.Client{},
+		logger: newTestLogger(),
+		token:  "s.test-token",
+		readErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "test_read_errors_request",
+		}, []string{"reason"}),
+		lastReadSuccess: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "test_read_success_request",
+		}),
+	}
+
+	_, err := c.ReadSecret("secret/myapp", "key")
+	if err == nil {
+		t.Fatal("expected error for invalid request URL")
+	}
+	if !strings.Contains(err.Error(), "creating request") {
+		t.Errorf("expected 'creating request' error, got: %v", err)
+	}
+}
+
+func TestReadSecret_ReadBodyError(t *testing.T) {
+	// Create a server that returns a response whose body errors on read.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set content-length to lie about body size, then close connection.
+		w.Header().Set("Content-Length", "999999")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("partial"))
+		// The handler will return and the connection will be closed, causing
+		// a read error when the client tries to read the full 999999 bytes.
+	}))
+	defer srv.Close()
+
+	c := &OpenBaoClient{
+		cfg:    OpenBaoConfig{Address: srv.URL},
+		client: srv.Client(),
+		logger: newTestLogger(),
+		token:  "s.test-token",
+		readErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "test_read_errors_body",
+		}, []string{"reason"}),
+		lastReadSuccess: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "test_read_success_body",
+		}),
+	}
+
+	_, err := c.ReadSecret("secret/myapp", "key")
+	// The body read may or may not error depending on how the HTTP client
+	// handles the truncated response. Either a read error or a parse error
+	// is acceptable here.
+	if err == nil {
+		t.Fatal("expected error for truncated body")
+	}
+}
+
+func TestLogin_RequestCreationError(t *testing.T) {
+	// Create a client with a broken address that causes login's http.Post to fail.
+	dir := t.TempDir()
+	roleIDFile := filepath.Join(dir, "role_id")
+	secretIDFile := filepath.Join(dir, "secret_id")
+	os.WriteFile(roleIDFile, []byte("test-role\n"), 0o600)
+	os.WriteFile(secretIDFile, []byte("test-secret\n"), 0o600)
+
+	c := &OpenBaoClient{
+		cfg: OpenBaoConfig{
+			Address:      "http://\x7f/",
+			RoleIDFile:   roleIDFile,
+			SecretIDFile: secretIDFile,
+		},
+		client: &http.Client{},
+		logger: newTestLogger(),
+		authenticated: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "test_auth_login_err",
+		}),
+	}
+
+	err := c.login()
+	if err == nil {
+		t.Fatal("expected error for invalid login URL")
+	}
+}
+
+func TestRenewToken_RequestCreationError(t *testing.T) {
+	c := &OpenBaoClient{
+		cfg: OpenBaoConfig{
+			Address: "http://\x7f/",
+		},
+		client: &http.Client{},
+		logger: newTestLogger(),
+		token:  "s.test-token",
+		tokenRenewals: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "test_renewals_err",
+		}),
+	}
+
+	err := c.renewToken()
+	if err == nil {
+		t.Fatal("expected error for invalid renew URL")
+	}
+	if !strings.Contains(err.Error(), "creating renew request") {
+		t.Errorf("expected 'creating renew request' error, got: %v", err)
+	}
+}
+
+// errorReadCloser returns an error on Read, simulating a broken response body.
+type errorReadCloser struct{}
+
+func (e errorReadCloser) Read(_ []byte) (int, error) { return 0, fmt.Errorf("simulated read error") }
+func (e errorReadCloser) Close() error               { return nil }
+
+// roundTripFunc is a function adapter for http.RoundTripper.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestLogin_ReadBodyError(t *testing.T) {
+	dir := t.TempDir()
+	roleIDFile := filepath.Join(dir, "role_id")
+	secretIDFile := filepath.Join(dir, "secret_id")
+	os.WriteFile(roleIDFile, []byte("role\n"), 0o600)
+	os.WriteFile(secretIDFile, []byte("secret\n"), 0o600)
+
+	c := &OpenBaoClient{
+		cfg: OpenBaoConfig{
+			Address:      "http://localhost:1",
+			RoleIDFile:   roleIDFile,
+			SecretIDFile: secretIDFile,
+		},
+		client: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{},
+					Body:       errorReadCloser{},
+				}, nil
+			}),
+		},
+		logger: newTestLogger(),
+		authenticated: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "test_auth_readbody",
+		}),
+	}
+
+	err := c.login()
+	if err == nil {
+		t.Fatal("expected error for body read failure")
+	}
+	if !strings.Contains(err.Error(), "reading login response") {
+		t.Errorf("expected 'reading login response' error, got: %v", err)
+	}
+}
+
+func TestRenewToken_ReadBodyError(t *testing.T) {
+	c := &OpenBaoClient{
+		cfg: OpenBaoConfig{
+			Address: "http://localhost:1",
+		},
+		client: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{},
+					Body:       errorReadCloser{},
+				}, nil
+			}),
+		},
+		logger:        newTestLogger(),
+		token:         "s.test-token",
+		tokenRenewals: prometheus.NewCounter(prometheus.CounterOpts{Name: "test_renewals_readbody"}),
+	}
+
+	err := c.renewToken()
+	if err == nil {
+		t.Fatal("expected error for body read failure")
+	}
+	if !strings.Contains(err.Error(), "reading renew response") {
+		t.Errorf("expected 'reading renew response' error, got: %v", err)
+	}
+}
+
+func TestTruncateVaultBody(t *testing.T) {
+	// Short string (len <= 512) should be returned unchanged.
+	short := "short body"
+	if got := truncateVaultBody(short); got != short {
+		t.Errorf("truncateVaultBody(%q) = %q, want %q", short, got, short)
+	}
+
+	// Exactly 512 bytes should be returned unchanged.
+	exact := strings.Repeat("a", 512)
+	if got := truncateVaultBody(exact); got != exact {
+		t.Errorf("truncateVaultBody(512 bytes) should return unchanged")
+	}
+
+	// Long string (> 512) should be truncated.
+	long := strings.Repeat("b", 1000)
+	got := truncateVaultBody(long)
+	if !strings.HasSuffix(got, "...(truncated)") {
+		t.Errorf("truncateVaultBody(1000 bytes) should end with '...(truncated)', got suffix %q", got[len(got)-20:])
+	}
+	if len(got) != 512+len("...(truncated)") {
+		t.Errorf("truncateVaultBody(1000 bytes) length = %d, want %d", len(got), 512+len("...(truncated)"))
 	}
 }
 

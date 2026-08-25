@@ -569,6 +569,17 @@ func TestValidateLocalURI(t *testing.T) {
 	}
 }
 
+func TestValidateLocalURI_UnparseableURI(t *testing.T) {
+	// A URI that url.Parse cannot handle should return an error.
+	err := validateLocalURI("://\x7f bad uri")
+	if err == nil {
+		t.Fatal("expected error for unparseable URI")
+	}
+	if !strings.Contains(err.Error(), "invalid libvirt URI") {
+		t.Errorf("expected 'invalid libvirt URI' error, got: %v", err)
+	}
+}
+
 func TestRunRejectsRemoteURI(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	ctx, cancel := context.WithCancel(context.Background())

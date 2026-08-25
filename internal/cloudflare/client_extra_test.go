@@ -141,6 +141,49 @@ func TestQueryGraphQL_ReadBodyError(t *testing.T) {
 	}
 }
 
+func TestClose_ZeroesToken(t *testing.T) {
+	c := NewClient("sensitive-token", 5*time.Second)
+	// Verify the token is set before Close.
+	for _, b := range c.apiToken {
+		if b != 0 {
+			break
+		}
+		t.Fatal("token bytes are all zero before Close")
+	}
+
+	c.Close()
+
+	for i, b := range c.apiToken {
+		if b != 0 {
+			t.Fatalf("apiToken[%d] = %d after Close, want 0", i, b)
+		}
+	}
+}
+
+func TestTruncateErrorBody(t *testing.T) {
+	// Short string (len <= 512) should be returned unchanged.
+	short := "short error body"
+	if got := truncateErrorBody(short); got != short {
+		t.Errorf("truncateErrorBody(%q) = %q, want %q", short, got, short)
+	}
+
+	// Exactly 512 bytes should be returned unchanged.
+	exact := strings.Repeat("x", 512)
+	if got := truncateErrorBody(exact); got != exact {
+		t.Errorf("truncateErrorBody(512 bytes) should return unchanged")
+	}
+
+	// Long string (> 512) should be truncated.
+	long := strings.Repeat("y", 1000)
+	got := truncateErrorBody(long)
+	if !strings.HasSuffix(got, "...(truncated)") {
+		t.Errorf("truncateErrorBody(1000 bytes) should end with '...(truncated)', got suffix %q", got[len(got)-20:])
+	}
+	if len(got) != 512+len("...(truncated)") {
+		t.Errorf("truncateErrorBody(1000 bytes) length = %d, want %d", len(got), 512+len("...(truncated)"))
+	}
+}
+
 func TestRESTGet_ReadBodyErrorDirect(t *testing.T) {
 	c := NewClient("token", 5*time.Second)
 	c.SetHTTPClient(&http.Client{

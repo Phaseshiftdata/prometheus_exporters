@@ -479,6 +479,48 @@ func TestExtractDomainInfo(t *testing.T) {
 	}
 }
 
+// TestRedactURI verifies the redactURI helper.
+func TestRedactURI(t *testing.T) {
+	t.Run("strips_userinfo", func(t *testing.T) {
+		got := redactURI("qemu+ssh://admin:secret@host/system")
+		if got == "" {
+			t.Fatal("expected non-empty result")
+		}
+		if testing.Verbose() {
+			t.Logf("redacted: %s", got)
+		}
+		// Must not contain the password.
+		for _, bad := range []string{"admin", "secret"} {
+			if contains(got, bad) {
+				t.Errorf("redacted URI should not contain %q, got %q", bad, got)
+			}
+		}
+	})
+
+	t.Run("invalid_uri", func(t *testing.T) {
+		got := redactURI("://\x7f bad uri")
+		if got != "<invalid-uri>" {
+			t.Errorf("expected '<invalid-uri>', got %q", got)
+		}
+	})
+
+	t.Run("no_userinfo", func(t *testing.T) {
+		got := redactURI("qemu:///system")
+		if got != "qemu:///system" {
+			t.Errorf("expected 'qemu:///system', got %q", got)
+		}
+	})
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
 // TestXMLDomainParsing verifies the XML domain parsing structures work correctly.
 func TestXMLDomainParsing(t *testing.T) {
 	xmlData := `<domain>

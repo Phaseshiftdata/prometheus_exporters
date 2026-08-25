@@ -1026,6 +1026,20 @@ func TestRootCmd_DatabasePasswordOpenBao_DatabaseURLFromEnv(t *testing.T) {
 	}
 }
 
+func TestWarnInsecureSSLMode(t *testing.T) {
+	// Unparseable URL: should return early without panic.
+	warnInsecureSSLMode("://not\x7fa valid URL")
+
+	// Secure mode: should not warn (we just verify no panic).
+	warnInsecureSSLMode("postgres://user@localhost/db?sslmode=verify-full")
+
+	// Insecure mode: should log a warning (we just verify no panic).
+	warnInsecureSSLMode("postgres://user@localhost/db?sslmode=disable")
+
+	// No sslmode at all: should log a warning (we just verify no panic).
+	warnInsecureSSLMode("postgres://user@localhost/db")
+}
+
 func TestRootCmd_DatabasePasswordFile_FromEnv(t *testing.T) {
 	// When --database-url is not set but DATABASE_URL is, the password file
 	// should still work.

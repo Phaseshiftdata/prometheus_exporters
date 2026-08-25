@@ -202,6 +202,29 @@ func TestDescribe(t *testing.T) {
 	}
 }
 
+func TestNewWithMax(t *testing.T) {
+	c := NewWithMax(100)
+	if c == nil {
+		t.Fatal("NewWithMax() returned nil")
+	}
+	if c.Name() != "arp" {
+		t.Errorf("expected name 'arp', got %q", c.Name())
+	}
+}
+
+func TestNewWithOptionsNegativeMax(t *testing.T) {
+	lister := &mockLister{}
+	c := NewWithOptions(lister, -1)
+	if c == nil {
+		t.Fatal("NewWithOptions(-1) returned nil")
+	}
+	// Should default to DefaultMaxEntries.
+	ac := c.(*arpCollector)
+	if ac.maxEntries != DefaultMaxEntries {
+		t.Errorf("expected maxEntries=%d for negative input, got %d", DefaultMaxEntries, ac.maxEntries)
+	}
+}
+
 func TestNew(t *testing.T) {
 	c := New()
 	if c == nil {
@@ -209,6 +232,43 @@ func TestNew(t *testing.T) {
 	}
 	if c.Name() != "arp" {
 		t.Errorf("expected name 'arp', got %q", c.Name())
+	}
+}
+
+func TestCollectTruncation(t *testing.T) {
+	mac1, _ := net.ParseMAC("aa:bb:cc:dd:ee:01")
+	mac2, _ := net.ParseMAC("aa:bb:cc:dd:ee:02")
+	mac3, _ := net.ParseMAC("aa:bb:cc:dd:ee:03")
+	mac4, _ := net.ParseMAC("aa:bb:cc:dd:ee:04")
+	mac5, _ := net.ParseMAC("aa:bb:cc:dd:ee:05")
+
+	lister := &mockLister{
+		neighbors: []Neighbor{
+			{IP: net.ParseIP("10.0.0.1"), MAC: mac1, Device: "eth0", State: 0x02},
+			{IP: net.ParseIP("10.0.0.2"), MAC: mac2, Device: "eth0", State: 0x02},
+			{IP: net.ParseIP("10.0.0.3"), MAC: mac3, Device: "eth0", State: 0x02},
+			{IP: net.ParseIP("10.0.0.4"), MAC: mac4, Device: "eth0", State: 0x02},
+			{IP: net.ParseIP("10.0.0.5"), MAC: mac5, Device: "eth0", State: 0x02},
+		},
+	}
+
+	// maxEntries=2 with 5 neighbors: only 2 emitted, truncated=1.
+	c := NewWithOptions(lister, 2)
+
+	// Verify truncated metric is set to 1.
+	expected := `
+# HELP network_arp_entries_truncated Set to 1 when the ARP table exceeds the maximum entry limit and output is truncated.
+# TYPE network_arp_entries_truncated gauge
+network_arp_entries_truncated 1
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_arp_entries_truncated"); err != nil {
+		t.Errorf("truncation metric mismatch: %v", err)
+	}
+
+	// Verify only 2 entry metrics are emitted.
+	entryCount := testutil.CollectAndCount(c, "network_arp_entry")
+	if entryCount != 2 {
+		t.Errorf("expected 2 ARP entries emitted, got %d", entryCount)
 	}
 }
 

@@ -252,6 +252,40 @@ func TestMultipleRemoteHostsSameLocalPort(t *testing.T) {
 	}
 }
 
+func TestNewWithMax(t *testing.T) {
+	dir := t.TempDir()
+	netDir := filepath.Join(dir, "net")
+	if err := os.MkdirAll(netDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Create minimal proc files so the constructor doesn't fail.
+	for _, f := range []string{"tcp", "tcp6", "udp", "udp6"} {
+		if err := os.WriteFile(filepath.Join(netDir, f), []byte("header\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	c := NewWithMax(dir, 100)
+	if c == nil {
+		t.Fatal("NewWithMax() returned nil")
+	}
+	if c.Name() != "netgraph" {
+		t.Errorf("expected name 'netgraph', got %q", c.Name())
+	}
+}
+
+func TestNewWithOptionsNegativeMax(t *testing.T) {
+	src := &mockSource{}
+	c := NewWithOptions(src, -1)
+	if c == nil {
+		t.Fatal("NewWithOptions(-1) returned nil")
+	}
+	nc := c.(*netgraphCollector)
+	if nc.maxEdges != DefaultMaxEdges {
+		t.Errorf("expected maxEdges=%d for negative input, got %d", DefaultMaxEdges, nc.maxEdges)
+	}
+}
+
 func TestName(t *testing.T) {
 	c := NewWithSource(&mockSource{})
 	if c.Name() != "netgraph" {
@@ -374,6 +408,38 @@ func TestProcfsSourceListConnectionsUDPError(t *testing.T) {
 	_, err := src.ListConnections()
 	if err == nil {
 		t.Error("expected error when UDP files are missing")
+	}
+}
+
+func TestCollectTruncation(t *testing.T) {
+	src := &mockSource{
+		connections: []Connection{
+			// Listen on port 80.
+			{LocalIP: "10.0.0.1", LocalPort: 80, RemoteIP: "0.0.0.0", RemotePort: 0, State: "LISTEN", Protocol: "tcp"},
+			// Three inbound connections from distinct remote hosts -> 3 unique edges.
+			{LocalIP: "10.0.0.1", LocalPort: 80, RemoteIP: "192.168.1.1", RemotePort: 45000, State: "ESTABLISHED", Protocol: "tcp"},
+			{LocalIP: "10.0.0.1", LocalPort: 80, RemoteIP: "192.168.1.2", RemotePort: 45001, State: "ESTABLISHED", Protocol: "tcp"},
+			{LocalIP: "10.0.0.1", LocalPort: 80, RemoteIP: "192.168.1.3", RemotePort: 45002, State: "ESTABLISHED", Protocol: "tcp"},
+		},
+	}
+
+	// maxEdges=1 with 3 unique edges: only 1 emitted, truncated=1.
+	c := NewWithOptions(src, 1)
+
+	// Verify truncated metric is set to 1.
+	expected := `
+# HELP network_graph_edges_truncated Set to 1 when the graph edge count exceeds the maximum limit and output is truncated.
+# TYPE network_graph_edges_truncated gauge
+network_graph_edges_truncated 1
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edges_truncated"); err != nil {
+		t.Errorf("truncation metric mismatch: %v", err)
+	}
+
+	// Verify only 1 edge metric is emitted.
+	edgeCount := testutil.CollectAndCount(c, "network_graph_edge")
+	if edgeCount != 1 {
+		t.Errorf("expected 1 edge emitted, got %d", edgeCount)
 	}
 }
 

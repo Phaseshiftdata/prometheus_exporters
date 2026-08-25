@@ -301,6 +301,60 @@ func TestGatewayNetworkCollector_EmptyData(t *testing.T) {
 	}
 }
 
+func TestGatewayNetworkCollector_MultipleUpstreamTimestamps(t *testing.T) {
+	// The upstream data has a NEWER timestamp than downstream, so the
+	// t.After(maxTime) true branch is exercised in the upstream loop.
+	// A second upstream row with an older timestamp ensures the false
+	// branch is also exercised.
+	tsOlder := time.Now().Add(-10 * time.Minute).Truncate(time.Minute).Format(time.RFC3339)
+	tsMiddle := time.Now().Add(-7 * time.Minute).Truncate(time.Minute).Format(time.RFC3339)
+	tsNewest := time.Now().Add(-5 * time.Minute).Truncate(time.Minute).Format(time.RFC3339)
+
+	bytesData := map[string]interface{}{
+		"viewer": map[string]interface{}{
+			"accounts": []map[string]interface{}{
+				{
+					"gatewayL4DownstreamSessionsAdaptiveGroups": []map[string]interface{}{
+						{
+							"sum":        map[string]int64{"bytesReceived": 512},
+							"dimensions": map[string]string{"datetimeMinute": tsOlder},
+						},
+					},
+					"gatewayL4UpstreamSessionsAdaptiveGroups": []map[string]interface{}{
+						{
+							"sum":        map[string]int64{"bytesSent": 1024},
+							"dimensions": map[string]string{"datetimeMinute": tsNewest},
+						},
+						{
+							"sum":        map[string]int64{"bytesSent": 2048},
+							"dimensions": map[string]string{"datetimeMinute": tsMiddle},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			w.Write(makeGraphQLResponse(gatewayNetworkResponseData()))
+		} else {
+			w.Write(makeGraphQLResponse(bytesData))
+		}
+	}))
+	defer server.Close()
+
+	ts := newTestSetup(t)
+	client := createTestClient(server)
+	c, _ := NewGatewayNetworkCollector(client, ts.store, ts.selfMetrics, ts.logger, 300, 60, 60, []string{"acc1"}, ts.registry)
+
+	if err := c.Collect(context.Background()); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
 func TestGatewayNetworkCollector_SessionsGraphQLError(t *testing.T) {
 	// Test that GraphQL errors in the sessions query are propagated
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
