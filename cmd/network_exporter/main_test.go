@@ -8,6 +8,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
 
+	"github.com/phaseshiftdata/prometheus_exporters/src/collector/arp"
+	"github.com/phaseshiftdata/prometheus_exporters/src/collector/netgraph"
 	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
 )
 
@@ -49,7 +51,7 @@ func TestSetupLogging(t *testing.T) {
 }
 
 func TestCreateNetworkCollectors(t *testing.T) {
-	collectors := createNetworkCollectors("/proc", "/sys")
+	collectors := createNetworkCollectors("/proc", "/sys", arp.DefaultMaxEntries, netgraph.DefaultMaxEdges)
 	if len(collectors) != 5 {
 		t.Errorf("expected 5 collectors, got %d", len(collectors))
 	}
@@ -83,7 +85,7 @@ func TestServeInvalidAddress(t *testing.T) {
 func TestRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
-	go func() { errCh <- run(ctx, "127.0.0.1:0", "/proc", "/sys", "info", nil) }()
+	go func() { errCh <- run(ctx, "127.0.0.1:0", "/proc", "/sys", "info", arp.DefaultMaxEntries, netgraph.DefaultMaxEdges, nil) }()
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 
@@ -106,7 +108,7 @@ func TestRunRegistrationError(t *testing.T) {
 	}, []string{"ip", "mac", "device", "state"})
 	reg.MustRegister(conflicting)
 
-	err := run(context.Background(), "127.0.0.1:0", "/proc", "/sys", "info", reg)
+	err := run(context.Background(), "127.0.0.1:0", "/proc", "/sys", "info", arp.DefaultMaxEntries, netgraph.DefaultMaxEdges, reg)
 	if err == nil {
 		t.Error("expected registration error")
 	}
@@ -156,7 +158,7 @@ func TestRunAllLogLevels(t *testing.T) {
 	for _, level := range []string{"debug", "warn", "error"} {
 		ctx, cancel := context.WithCancel(context.Background())
 		errCh := make(chan error, 1)
-		go func() { errCh <- run(ctx, "127.0.0.1:0", "/proc", "/sys", level, nil) }()
+		go func() { errCh <- run(ctx, "127.0.0.1:0", "/proc", "/sys", level, arp.DefaultMaxEntries, netgraph.DefaultMaxEdges, nil) }()
 		time.Sleep(50 * time.Millisecond)
 		cancel()
 		select {

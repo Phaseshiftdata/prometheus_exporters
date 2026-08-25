@@ -84,30 +84,56 @@ func nudStateString(state int) string {
 	}
 }
 
+// DefaultMaxEntries is the default maximum number of ARP entries to export.
+// This prevents metric cardinality explosion under ARP flooding.
+const DefaultMaxEntries = 10000
+
 // arpCollector implements collector.Collector for the ARP table.
 type arpCollector struct {
-	lister NeighborLister
-	desc   *prometheus.Desc
+	lister     NeighborLister
+	maxEntries int
+	desc       *prometheus.Desc
+	descTrunc  *prometheus.Desc
 }
 
 // Compile-time interface check.
 var _ collector.Collector = (*arpCollector)(nil)
 
-// New returns an ARP collector backed by the real netlink implementation.
+// New returns an ARP collector backed by the real netlink implementation
+// with the default maximum entry limit.
 func New() collector.Collector {
-	return NewWithLister(&netlinkLister{})
+	return NewWithOptions(&netlinkLister{}, DefaultMaxEntries)
+}
+
+// NewWithMax returns an ARP collector with a custom maximum entry limit.
+func NewWithMax(maxEntries int) collector.Collector {
+	return NewWithOptions(&netlinkLister{}, maxEntries)
 }
 
 // NewWithLister returns an ARP collector using the provided NeighborLister,
 // which is useful for injecting mocks in tests.
 func NewWithLister(lister NeighborLister) collector.Collector {
+	return NewWithOptions(lister, DefaultMaxEntries)
+}
+
+// NewWithOptions returns an ARP collector with a custom lister and max entries.
+func NewWithOptions(lister NeighborLister, maxEntries int) collector.Collector {
+	if maxEntries <= 0 {
+		maxEntries = DefaultMaxEntries
+	}
 	return &arpCollector{
-		lister: lister,
+		lister:     lister,
+		maxEntries: maxEntries,
 		desc: prometheus.NewDesc(
 			"network_arp_entry",
 			"ARP table entry; value is always 1.",
 			[]string{"ip", "mac", "device", "state"},
 			nil,
+		),
+		descTrunc: prometheus.NewDesc(
+			"network_arp_entries_truncated",
+			"Set to 1 when the ARP table exceeds the maximum entry limit and output is truncated.",
+			nil, nil,
 		),
 	}
 }
@@ -118,6 +144,7 @@ func (c *arpCollector) Name() string { return "arp" }
 // Describe sends the metric descriptor to the channel.
 func (c *arpCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.desc
+	ch <- c.descTrunc
 }
 
 // Collect queries the ARP table and sends one gauge per IPv4 entry.
@@ -127,10 +154,15 @@ func (c *arpCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.NewInvalidMetric(c.desc, err)
 		return
 	}
+	emitted := 0
 	for _, n := range neighbors {
 		// Skip entries with nil IP or IPv6 addresses.
 		if n.IP == nil || n.IP.To4() == nil {
 			continue
+		}
+		if emitted >= c.maxEntries {
+			ch <- prometheus.MustNewConstMetric(c.descTrunc, prometheus.GaugeValue, 1)
+			return
 		}
 		ch <- prometheus.MustNewConstMetric(
 			c.desc,
@@ -141,5 +173,7 @@ func (c *arpCollector) Collect(ch chan<- prometheus.Metric) {
 			n.Device,
 			nudStateString(n.State),
 		)
+		emitted++
 	}
+	ch <- prometheus.MustNewConstMetric(c.descTrunc, prometheus.GaugeValue, 0)
 }

@@ -207,6 +207,11 @@ func run(ctx context.Context, cfg runConfig) error {
 		dbURL = os.Getenv("DATABASE_URL")
 	}
 
+	// Warn if the database connection does not enforce TLS.
+	if dbURL != "" {
+		warnInsecureSSLMode(dbURL)
+	}
+
 	// Set up GitHub auth.
 	auth, err := ghpkg.NewAuth(cfg.appID, cfg.installID, cfg.keyFile)
 	if err != nil {
@@ -466,4 +471,27 @@ func (a *storeAdapter) UpsertTags(ctx context.Context, tags []ghpkg.Tag) error {
 		}
 	}
 	return nil
+}
+
+// secureSSLModes lists sslmode values that enforce TLS on the connection.
+var secureSSLModes = map[string]bool{
+	"require":    true,
+	"verify-ca":  true,
+	"verify-full": true,
+}
+
+// warnInsecureSSLMode logs a warning if the database URL does not set
+// sslmode to a TLS-enforcing value.
+func warnInsecureSSLMode(dsn string) {
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		return
+	}
+	mode := parsed.Query().Get("sslmode")
+	if !secureSSLModes[mode] {
+		slog.Warn("database connection does not enforce TLS",
+			"sslmode", mode,
+			"hint", "set sslmode=require, verify-ca, or verify-full for production use",
+		)
+	}
 }

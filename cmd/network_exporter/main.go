@@ -33,13 +33,15 @@ func rootCmd() *cobra.Command {
 	var procPath string
 	var sysPath string
 	var logLevel string
+	var maxArpEntries int
+	var maxGraphEdges int
 
 	cmd := &cobra.Command{
 		Use:     "network_exporter",
 		Short:   "Prometheus exporter for host network metrics",
 		Version: exporter.VersionString(),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), listenAddr, procPath, sysPath, logLevel, nil)
+			return run(cmd.Context(), listenAddr, procPath, sysPath, logLevel, maxArpEntries, maxGraphEdges, nil)
 		},
 	}
 
@@ -47,18 +49,20 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&procPath, "proc-path", "/proc", "Path to procfs mount")
 	cmd.Flags().StringVar(&sysPath, "sys-path", "/sys", "Path to sysfs mount")
 	cmd.Flags().StringVar(&logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	cmd.Flags().IntVar(&maxArpEntries, "max-arp-entries", arp.DefaultMaxEntries, "Maximum ARP entries to export (prevents cardinality explosion)")
+	cmd.Flags().IntVar(&maxGraphEdges, "max-graph-edges", netgraph.DefaultMaxEdges, "Maximum network graph edges to export (prevents cardinality explosion)")
 
 	return cmd
 }
 
-func run(ctx context.Context, listenAddr, procPath, sysPath, logLevel string, reg *prometheus.Registry) error {
+func run(ctx context.Context, listenAddr, procPath, sysPath, logLevel string, maxArpEntries, maxGraphEdges int, reg *prometheus.Registry) error {
 	exporter.SetupLogging(logLevel)
 
 	if reg == nil {
 		reg = prometheus.NewRegistry()
 	}
 
-	for _, c := range createNetworkCollectors(procPath, sysPath) {
+	for _, c := range createNetworkCollectors(procPath, sysPath, maxArpEntries, maxGraphEdges) {
 		if err := reg.Register(c); err != nil {
 			return fmt.Errorf("registering collector %s: %w", c.Name(), err)
 		}
@@ -68,11 +72,11 @@ func run(ctx context.Context, listenAddr, procPath, sysPath, logLevel string, re
 	return exporter.Serve(ctx, listenAddr, "Network Exporter", reg)
 }
 
-func createNetworkCollectors(procPath, sysPath string) []collector.Collector {
+func createNetworkCollectors(procPath, sysPath string, maxArpEntries, maxGraphEdges int) []collector.Collector {
 	return []collector.Collector{
-		arp.New(),
+		arp.NewWithMax(maxArpEntries),
 		iface.New(sysPath),
-		netgraph.New(procPath),
+		netgraph.NewWithMax(procPath, maxGraphEdges),
 		conntrack.New(procPath),
 		firewall.New(),
 	}

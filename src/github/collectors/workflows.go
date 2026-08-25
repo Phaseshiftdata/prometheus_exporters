@@ -128,7 +128,7 @@ func (c *WorkflowCollector) CollectRunsPage(
 		params.Set("created", ">="+q.CreatedSince.UTC().Format("2006-01-02"))
 	}
 	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/runs?%s",
-		org, repo, params.Encode())
+		url.PathEscape(org), url.PathEscape(repo), params.Encode())
 
 	var resp apiRunsResponse
 	modified, err := c.Client.Get(ctx, endpoint, &resp)
@@ -178,7 +178,7 @@ func (c *WorkflowCollector) CollectJobs(
 	ctx context.Context, org, repo string, runID int64,
 ) ([]WorkflowJob, error) {
 	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/runs/%d/jobs",
-		org, repo, runID)
+		url.PathEscape(org), url.PathEscape(repo), runID)
 
 	var resp apiJobsResponse
 	if _, err := c.Client.Get(ctx, endpoint, &resp); err != nil {

@@ -3,6 +3,7 @@ package collectors
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -28,7 +29,7 @@ func (c *CommitCollector) Collect(ctx context.Context, org, repo string, default
 	page := 1
 
 	for {
-		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits?sha=%s&per_page=100&page=%d", org, repo, defaultBranch, page)
+		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits?sha=%s&per_page=100&page=%d", url.PathEscape(org), url.PathEscape(repo), url.QueryEscape(defaultBranch), page)
 		var batch []apiCommit
 		modified, err := c.Client.Get(ctx, url, &batch)
 		if err != nil {
@@ -54,6 +55,9 @@ func (c *CommitCollector) Collect(ctx context.Context, org, repo string, default
 			break
 		}
 		page++
+		if page > maxPages {
+			return nil, fmt.Errorf("commits pagination exceeded %d pages", maxPages)
+		}
 	}
 
 	return commits, nil

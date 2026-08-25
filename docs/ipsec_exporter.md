@@ -96,6 +96,8 @@ variables are required.
 | `--sys-path` | `/sys` | Path to the sysfs mount point. Override when running in a container with sysfs bind-mounted to a non-default path. |
 | `--vici-socket` | `/var/run/charon.vici` | Path to the strongSwan VICI Unix socket. |
 | `--log-level` | `info` | Log verbosity. One of `debug`, `info`, `warn`, `error`. |
+| `--max-arp-entries` | `10000` | Maximum number of ARP entries to export per scrape. Prevents metric cardinality explosion under ARP flooding. When exceeded, output is truncated and `network_arp_entries_truncated` is set to 1. |
+| `--max-graph-edges` | `10000` | Maximum number of network graph edges to export per scrape. Prevents metric cardinality explosion under high connection volume. When exceeded, output is truncated and `network_graph_edges_truncated` is set to 1. |
 
 ## Collectors
 

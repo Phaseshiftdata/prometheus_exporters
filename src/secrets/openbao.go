@@ -17,6 +17,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const (
+	// maxVaultResponseBytes caps how much of a Vault/OpenBao response is read.
+	maxVaultResponseBytes = 1 << 20 // 1 MiB
+
+	// maxVaultErrorBodyLog caps how much of a Vault error body is included
+	// in error messages to prevent credential-like content from flooding logs.
+	maxVaultErrorBodyLog = 512
+)
+
+// truncateVaultBody returns at most maxVaultErrorBodyLog bytes of s.
+func truncateVaultBody(s string) string {
+	if len(s) <= maxVaultErrorBodyLog {
+		return s
+	}
+	return s[:maxVaultErrorBodyLog] + "...(truncated)"
+}
+
 // OpenBaoConfig holds the connection and authentication parameters for an
 // OpenBao (or Vault) server.
 type OpenBaoConfig struct {
@@ -113,11 +130,15 @@ func NewOpenBaoClient(cfg OpenBaoConfig, reg prometheus.Registerer, logger *slog
 	return c, nil
 }
 
-// Close stops the background token renewal goroutine.
+// Close stops the background token renewal goroutine and clears the
+// cached token from memory.
 func (c *OpenBaoClient) Close() {
 	if c.cancel != nil {
 		c.cancel()
 	}
+	c.mu.Lock()
+	c.token = ""
+	c.mu.Unlock()
 }
 
 // ReadSecret reads a KV v2 secret at the given path and returns the value
@@ -151,7 +172,7 @@ func (c *OpenBaoClient) ReadSecret(path, field string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxVaultResponseBytes))
 	if err != nil {
 		c.readErrors.WithLabelValues("read_body_error").Inc()
 		return "", fmt.Errorf("openbao: reading response body: %w", err)
@@ -167,7 +188,7 @@ func (c *OpenBaoClient) ReadSecret(path, field string) (string, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		c.readErrors.WithLabelValues("http_error").Inc()
-		return "", fmt.Errorf("openbao: unexpected status %d reading %s: %s", resp.StatusCode, path, string(body))
+		return "", fmt.Errorf("openbao: unexpected status %d reading %s: %s", resp.StatusCode, path, truncateVaultBody(string(body)))
 	}
 
 	// KV v2 response structure: { "data": { "data": { "field": "value" }, "metadata": {...} } }
@@ -223,13 +244,13 @@ func (c *OpenBaoClient) login() error {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxVaultResponseBytes))
 	if err != nil {
 		return fmt.Errorf("reading login response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("AppRole login failed (HTTP %d): %s", resp.StatusCode, string(body))
+		return fmt.Errorf("AppRole login failed (HTTP %d): %s", resp.StatusCode, truncateVaultBody(string(body)))
 	}
 
 	var result struct {
@@ -283,13 +304,13 @@ func (c *OpenBaoClient) renewToken() error {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxVaultResponseBytes))
 	if err != nil {
 		return fmt.Errorf("reading renew response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("token renewal failed (HTTP %d): %s", resp.StatusCode, string(body))
+		return fmt.Errorf("token renewal failed (HTTP %d): %s", resp.StatusCode, truncateVaultBody(string(body)))
 	}
 
 	var result struct {

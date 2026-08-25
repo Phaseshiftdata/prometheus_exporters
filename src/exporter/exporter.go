@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"os"
@@ -53,14 +54,17 @@ func Serve(ctx context.Context, listenAddr, exporterName string, reg *prometheus
 	}))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		escaped := html.EscapeString(exporterName)
 		fmt.Fprintf(w, `<html><head><title>%s</title></head>
-<body><h1>%s</h1><p><a href="/metrics">Metrics</a></p></body></html>`, exporterName, exporterName)
+<body><h1>%s</h1><p><a href="/metrics">Metrics</a></p></body></html>`, escaped, escaped)
 	})
 
 	srv := &http.Server{
 		Addr:              listenAddr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)

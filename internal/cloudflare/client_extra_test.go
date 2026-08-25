@@ -60,8 +60,8 @@ func TestNewClient_Defaults(t *testing.T) {
 	if c == nil {
 		t.Fatal("expected non-nil client")
 	}
-	if c.apiToken != "my-token" {
-		t.Fatalf("expected 'my-token', got %q", c.apiToken)
+	if string(c.apiToken) != "my-token" {
+		t.Fatalf("expected 'my-token', got %q", string(c.apiToken))
 	}
 }
 

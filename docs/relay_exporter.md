@@ -376,6 +376,9 @@ prevents resource exhaustion when many targets are scraped simultaneously.
 - **Authorization forwarding:** The `Authorization` header is forwarded
   from Prometheus to the target, supporting bearer token authentication
   on targets.
+- **Response body limit:** Target responses are capped at 100 MiB. This
+  prevents a misbehaving target from causing the relay to exhaust memory.
+  Prometheus scrape responses are typically well under 1 MiB.
 
 ## Logging
 

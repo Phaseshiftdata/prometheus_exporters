@@ -5,20 +5,49 @@ package secrets
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
+// maxSecretFilePerms is the most permissive file mode allowed for secret
+// files.  Group and other bits must be zero (owner-only access).
+const maxSecretFilePerms fs.FileMode = 0o600
+
 // ReadSecretFile reads a secret from a file path, trims trailing whitespace.
-// Returns an error if the file is missing, unreadable, or empty after trimming.
+// Returns an error if the file is missing, unreadable, empty after trimming,
+// a symlink, or has permissions more permissive than 0600.
 func ReadSecretFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	// Resolve to an absolute path to produce clear error messages.
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolving secret file path: %w", err)
+	}
+
+	// Reject symlinks: Lstat does not follow symlinks, so if the mode
+	// includes ModeSymlink the path is a symlink.
+	linfo, err := os.Lstat(absPath)
+	if err != nil {
+		return "", fmt.Errorf("reading secret file: %w", err)
+	}
+	if linfo.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("secret file %q is a symlink; use the real path for security", absPath)
+	}
+
+	// Check file permissions — must not be group- or world-readable.
+	perm := linfo.Mode().Perm()
+	if perm&^maxSecretFilePerms != 0 {
+		return "", fmt.Errorf("secret file %q has mode %04o; must be %04o or stricter", absPath, perm, maxSecretFilePerms)
+	}
+
+	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return "", fmt.Errorf("reading secret file: %w", err)
 	}
 	secret := strings.TrimRight(string(data), " \t\r\n")
 	if secret == "" {
-		return "", fmt.Errorf("secret file %q is empty after trimming whitespace", path)
+		return "", fmt.Errorf("secret file %q is empty after trimming whitespace", absPath)
 	}
 	return secret, nil
 }

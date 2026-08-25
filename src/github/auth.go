@@ -14,15 +14,14 @@ import (
 // Auth handles GitHub App authentication and installation token management.
 // It is safe for concurrent use.
 type Auth struct {
-	appID         int64
-	installID     int64
-	privateKey    []byte
-	transport     *ghinstallation.Transport
-	mu            sync.Mutex
-	cachedToken   string
-	tokenExpiry   time.Time
-	nowFunc       func() time.Time // for testing
-	tokenRefresh  func(ctx context.Context) (string, time.Time, error)
+	appID        int64
+	installID    int64
+	transport    *ghinstallation.Transport
+	mu           sync.Mutex
+	cachedToken  string
+	tokenExpiry  time.Time
+	nowFunc      func() time.Time // for testing
+	tokenRefresh func(ctx context.Context) (string, time.Time, error)
 }
 
 // NewAuth creates a new Auth by reading the PEM private key from keyFile.
@@ -35,18 +34,25 @@ func NewAuth(appID, installID int64, keyFile string) (*Auth, error) {
 }
 
 // NewAuthFromKey creates a new Auth from raw PEM private key bytes.
+// The key slice is zeroed after the transport is constructed.
 func NewAuthFromKey(appID, installID int64, key []byte) (*Auth, error) {
 	tr, err := ghinstallation.New(http.DefaultTransport, appID, installID, key)
+
+	// Zeroize the private key material now that the transport holds its
+	// own parsed copy.  This limits the window for memory exposure.
+	for i := range key {
+		key[i] = 0
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("creating installation transport: %w", err)
 	}
 
 	a := &Auth{
-		appID:      appID,
-		installID:  installID,
-		privateKey: key,
-		transport:  tr,
-		nowFunc:    time.Now,
+		appID:     appID,
+		installID: installID,
+		transport: tr,
+		nowFunc:   time.Now,
 	}
 	a.tokenRefresh = a.defaultTokenRefresh
 	return a, nil

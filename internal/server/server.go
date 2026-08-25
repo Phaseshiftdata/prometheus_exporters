@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"time"
 
@@ -26,7 +27,7 @@ type Config struct {
 	TLSCertFile       string
 	TLSKeyFile        string
 	BasicAuthUsername  string
-	BasicAuthPassword string
+	BasicAuthPassword []byte
 }
 
 // Server is the HTTP server for the exporter.
@@ -145,7 +146,8 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, `{"error":"failed to serialize capabilities: %s"}`, err.Error())
+		errResp, _ := json.Marshal(map[string]string{"error": "failed to serialize capabilities: " + err.Error()})
+		w.Write(errResp)
 		return
 	}
 
@@ -170,11 +172,11 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 <p><a href="/health">Health</a></p>
 <p><a href="/capabilities">Capabilities</a></p>
 </body>
-</html>`, s.config.MetricsPath)
+</html>`, html.EscapeString(s.config.MetricsPath))
 }
 
 func (s *Server) maybeAuth(next http.Handler) http.Handler {
-	if s.config.BasicAuthUsername == "" && s.config.BasicAuthPassword == "" {
+	if s.config.BasicAuthUsername == "" && len(s.config.BasicAuthPassword) == 0 {
 		return next
 	}
 
@@ -182,7 +184,7 @@ func (s *Server) maybeAuth(next http.Handler) http.Handler {
 		user, pass, ok := r.BasicAuth()
 		if !ok ||
 			subtle.ConstantTimeCompare([]byte(user), []byte(s.config.BasicAuthUsername)) != 1 ||
-			subtle.ConstantTimeCompare([]byte(pass), []byte(s.config.BasicAuthPassword)) != 1 {
+			subtle.ConstantTimeCompare([]byte(pass), s.config.BasicAuthPassword) != 1 {
 			w.Header().Set("WWW-Authenticate", `Basic realm="cloudflare_exporter"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return

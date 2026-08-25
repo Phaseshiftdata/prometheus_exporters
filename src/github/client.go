@@ -34,9 +34,15 @@ type Client struct {
 	sleepFunc func(d time.Duration) // for testing
 }
 
+// maxResponseBytes bounds how much of a success response is read.
+const maxResponseBytes = 100 << 20 // 100 MiB
+
 // maxErrorBodyBytes bounds how much of an error response is read. Enough for a
 // GitHub error message, and not a promise to buffer whatever arrives.
 const maxErrorBodyBytes = 8 << 10
+
+// maxETagEntries caps the ETag cache to prevent unbounded memory growth.
+const maxETagEntries = 10000
 
 // Rate limit kinds. GitHub answers 403 for both and the difference decides
 // whether the right response is seconds or most of an hour.
@@ -157,10 +163,15 @@ func (c *Client) Get(ctx context.Context, url string, result interface{}) (modif
 			etag := resp.Header.Get("ETag")
 			if etag != "" {
 				c.etagMu.Lock()
+				if len(c.etags) >= maxETagEntries {
+					// Evict all entries to bound memory. The next
+					// poll cycle will repopulate with fresh ETags.
+					c.etags = make(map[string]string, maxETagEntries/2)
+				}
 				c.etags[url] = etag
 				c.etagMu.Unlock()
 			}
-			body, readErr := io.ReadAll(resp.Body)
+			body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 			resp.Body.Close()
 			if readErr != nil {
 				return false, fmt.Errorf("reading response body: %w", readErr)

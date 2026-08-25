@@ -3,6 +3,7 @@ package collectors
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -49,7 +50,7 @@ func (c *TagCollector) Collect(ctx context.Context, org, repo string) ([]Tag, er
 	page := 1
 
 	for {
-		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/tags?per_page=100&page=%d", org, repo, page)
+		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/tags?per_page=100&page=%d", url.PathEscape(org), url.PathEscape(repo), page)
 		var batch []apiTag
 		modified, getErr := c.Client.Get(ctx, url, &batch)
 		if getErr != nil {
@@ -76,6 +77,9 @@ func (c *TagCollector) Collect(ctx context.Context, org, repo string) ([]Tag, er
 			break
 		}
 		page++
+		if page > maxPages {
+			return nil, fmt.Errorf("tags pagination exceeded %d pages", maxPages)
+		}
 	}
 
 	return tags, nil
@@ -86,7 +90,7 @@ func (c *TagCollector) collectReleases(ctx context.Context, org, repo string) ([
 	page := 1
 
 	for {
-		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100&page=%d", org, repo, page)
+		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100&page=%d", url.PathEscape(org), url.PathEscape(repo), page)
 		var batch []apiRelease
 		modified, err := c.Client.Get(ctx, url, &batch)
 		if err != nil {
@@ -100,6 +104,9 @@ func (c *TagCollector) collectReleases(ctx context.Context, org, repo string) ([
 			break
 		}
 		page++
+		if page > maxPages {
+			return nil, fmt.Errorf("releases pagination exceeded %d pages", maxPages)
+		}
 	}
 
 	return releases, nil

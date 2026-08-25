@@ -42,38 +42,38 @@ func (m *mockLibvirtClient) GetHostMemoryBytes() (uint64, error)     { return m.
 func (m *mockLibvirtClient) GetHostFreeMemoryBytes() (uint64, error) { return m.hostFreeMem, m.hostFreeMemErr }
 func (m *mockLibvirtClient) ListDomains() ([]DomainInfo, error)      { return m.domains, m.domainsErr }
 
-func (m *mockLibvirtClient) GetDomainMemoryStats(name string) ([]DomainMemoryStat, error) {
+func (m *mockLibvirtClient) GetDomainMemoryStats(uuid string) ([]DomainMemoryStat, error) {
 	if m.memStatsErr != nil {
-		if err, ok := m.memStatsErr[name]; ok {
+		if err, ok := m.memStatsErr[uuid]; ok {
 			return nil, err
 		}
 	}
 	if m.memStats != nil {
-		return m.memStats[name], nil
+		return m.memStats[uuid], nil
 	}
 	return nil, nil
 }
 
-func (m *mockLibvirtClient) GetDomainBlockStats(name string) ([]DomainBlockStats, error) {
+func (m *mockLibvirtClient) GetDomainBlockStats(uuid string) ([]DomainBlockStats, error) {
 	if m.blockStatsErr != nil {
-		if err, ok := m.blockStatsErr[name]; ok {
+		if err, ok := m.blockStatsErr[uuid]; ok {
 			return nil, err
 		}
 	}
 	if m.blockStats != nil {
-		return m.blockStats[name], nil
+		return m.blockStats[uuid], nil
 	}
 	return nil, nil
 }
 
-func (m *mockLibvirtClient) GetDomainInterfaceStats(name string) ([]DomainInterfaceStats, error) {
+func (m *mockLibvirtClient) GetDomainInterfaceStats(uuid string) ([]DomainInterfaceStats, error) {
 	if m.ifaceStatsErr != nil {
-		if err, ok := m.ifaceStatsErr[name]; ok {
+		if err, ok := m.ifaceStatsErr[uuid]; ok {
 			return nil, err
 		}
 	}
 	if m.ifaceStats != nil {
-		return m.ifaceStats[name], nil
+		return m.ifaceStats[uuid], nil
 	}
 	return nil, nil
 }
@@ -240,7 +240,7 @@ func TestDomainMemoryStats(t *testing.T) {
 			},
 		},
 		memStats: map[string][]DomainMemoryStat{
-			"db-server": {
+			"550e8400-e29b-41d4-a716-446655440001": {
 				{Tag: 6, Val: 4194304},  // actual (4 GiB in KiB)
 				{Tag: 4, Val: 1048576},  // unused (1 GiB in KiB)
 				{Tag: 5, Val: 3932160},  // available
@@ -277,7 +277,7 @@ func TestDomainBlockStats(t *testing.T) {
 			},
 		},
 		blockStats: map[string][]DomainBlockStats{
-			"web-server": {
+			"550e8400-e29b-41d4-a716-446655440000": {
 				{Device: "vda", RdBytes: 1048576, WrBytes: 2097152, RdReq: 1000, WrReq: 2000},
 				{Device: "vdb", RdBytes: 524288, WrBytes: 1048576, RdReq: 500, WrReq: 1000},
 			},
@@ -325,7 +325,7 @@ func TestDomainInterfaceStats(t *testing.T) {
 			},
 		},
 		ifaceStats: map[string][]DomainInterfaceStats{
-			"web-server": {
+			"550e8400-e29b-41d4-a716-446655440000": {
 				{
 					Name:      "vnet0",
 					RxBytes:   10485760,
@@ -499,7 +499,7 @@ func TestMemoryStatsError(t *testing.T) {
 			},
 		},
 		memStatsErr: map[string]error{
-			"test-vm": fmt.Errorf("domain not running"),
+			"uuid-test": fmt.Errorf("domain not running"),
 		},
 	}
 
@@ -535,7 +535,7 @@ func TestBlockStatsError(t *testing.T) {
 			},
 		},
 		blockStatsErr: map[string]error{
-			"test-vm": fmt.Errorf("block stats unavailable"),
+			"uuid-test": fmt.Errorf("block stats unavailable"),
 		},
 	}
 
@@ -568,7 +568,7 @@ func TestInterfaceStatsError(t *testing.T) {
 			},
 		},
 		ifaceStatsErr: map[string]error{
-			"test-vm": fmt.Errorf("interface stats unavailable"),
+			"uuid-test": fmt.Errorf("interface stats unavailable"),
 		},
 	}
 
@@ -641,7 +641,7 @@ func TestUnknownMemoryStatTag(t *testing.T) {
 			},
 		},
 		memStats: map[string][]DomainMemoryStat{
-			"test-vm": {
+			"uuid-test": {
 				{Tag: 99, Val: 12345},
 			},
 		},
@@ -674,18 +674,18 @@ func TestFullCollection(t *testing.T) {
 			},
 		},
 		memStats: map[string][]DomainMemoryStat{
-			"prod-web": {
+			"uuid-prod-web": {
 				{Tag: 6, Val: 4194304},
 				{Tag: 7, Val: 4300800},
 			},
 		},
 		blockStats: map[string][]DomainBlockStats{
-			"prod-web": {
+			"uuid-prod-web": {
 				{Device: "vda", RdBytes: 10485760, WrBytes: 20971520, RdReq: 10000, WrReq: 20000},
 			},
 		},
 		ifaceStats: map[string][]DomainInterfaceStats{
-			"prod-web": {
+			"uuid-prod-web": {
 				{Name: "vnet0", RxBytes: 104857600, TxBytes: 52428800, RxPackets: 100000, TxPackets: 50000, RxErrs: 0, TxErrs: 0},
 			},
 		},

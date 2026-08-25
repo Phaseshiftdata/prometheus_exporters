@@ -145,7 +145,7 @@ func TestBasicAuth_NoCredentials(t *testing.T) {
 	srv := newTestServer(t, Config{
 		MetricsPath:       "/metrics",
 		BasicAuthUsername: "admin",
-		BasicAuthPassword: "secret",
+		BasicAuthPassword: []byte("secret"),
 	})
 
 	handler := srv.maybeAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -168,7 +168,7 @@ func TestBasicAuth_WrongCredentials(t *testing.T) {
 	srv := newTestServer(t, Config{
 		MetricsPath:       "/metrics",
 		BasicAuthUsername: "admin",
-		BasicAuthPassword: "secret",
+		BasicAuthPassword: []byte("secret"),
 	})
 
 	handler := srv.maybeAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -189,7 +189,7 @@ func TestBasicAuth_CorrectCredentials(t *testing.T) {
 	srv := newTestServer(t, Config{
 		MetricsPath:       "/metrics",
 		BasicAuthUsername: "admin",
-		BasicAuthPassword: "secret",
+		BasicAuthPassword: []byte("secret"),
 	})
 
 	handler := srv.maybeAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
