@@ -68,7 +68,7 @@ network_arp_entry{device="eth0",ip="10.0.0.7",mac="aa:bb:cc:dd:ee:07",state="noa
 network_arp_entry{device="eth0",ip="10.0.0.8",mac="aa:bb:cc:dd:ee:08",state="permanent"} 1
 network_arp_entry{device="eth0",ip="10.0.0.9",mac="aa:bb:cc:dd:ee:09",state="unknown(255)"} 1
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_arp_entry"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -81,7 +81,7 @@ func TestCollectEmptyTable(t *testing.T) {
 # HELP network_arp_entry ARP table entry; value is always 1.
 # TYPE network_arp_entry gauge
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_arp_entry"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -103,7 +103,7 @@ func TestIPv6Filtered(t *testing.T) {
 # TYPE network_arp_entry gauge
 network_arp_entry{device="eth0",ip="10.0.0.1",mac="aa:bb:cc:dd:ee:01",state="reachable"} 1
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_arp_entry"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -124,7 +124,7 @@ func TestNilIPFiltered(t *testing.T) {
 # TYPE network_arp_entry gauge
 network_arp_entry{device="eth0",ip="10.0.0.1",mac="aa:bb:cc:dd:ee:01",state="stale"} 1
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_arp_entry"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -164,7 +164,7 @@ func TestZeroMACFailedState(t *testing.T) {
 # TYPE network_arp_entry gauge
 network_arp_entry{device="eth0",ip="10.0.0.1",mac="00:00:00:00:00:00",state="failed"} 1
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_arp_entry"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -189,13 +189,16 @@ func TestListNeighborsError(t *testing.T) {
 
 func TestDescribe(t *testing.T) {
 	c := NewWithLister(&mockLister{})
-	ch := make(chan *prometheus.Desc, 1)
+	ch := make(chan *prometheus.Desc, 2)
 	c.Describe(ch)
 	close(ch)
 
-	desc := <-ch
-	if desc == nil {
-		t.Fatal("expected a descriptor, got nil")
+	count := 0
+	for range ch {
+		count++
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 descriptors, got %d", count)
 	}
 }
 

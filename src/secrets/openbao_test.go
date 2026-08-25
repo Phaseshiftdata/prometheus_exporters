@@ -311,14 +311,16 @@ func TestSealedVaultRetry(t *testing.T) {
 	// failure: attempt 1 at t=0 (fails), retry at t=5s (fails, backoff
 	// becomes 10s), retry at t=15s (succeeds). We need ~17s total.
 	time.Sleep(17 * time.Second)
-	client.Close()
 
+	// Check token before Close(), which clears it.
 	client.mu.RLock()
 	tok = client.token
 	client.mu.RUnlock()
 	if tok != "s.recovered" {
 		t.Errorf("expected token %q after recovery, got %q", "s.recovered", tok)
 	}
+
+	client.Close()
 
 	if attempts.Load() < 3 {
 		t.Errorf("expected at least 3 login attempts, got %d", attempts.Load())
