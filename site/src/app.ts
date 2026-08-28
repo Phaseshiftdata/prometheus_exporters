@@ -7,11 +7,11 @@ import { LibvirtExporterPage } from "./pages/libvirt-exporter.js";
 import { RelayExporterPage } from "./pages/relay-exporter.js";
 
 declare const __APP_VERSION__: string;
-const VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
+export const VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
 type PageComponent = () => string;
 
-const ROUTES: Record<string, PageComponent> = Object.create(null);
+export const ROUTES: Record<string, PageComponent> = Object.create(null);
 ROUTES["/"] = HomePage;
 ROUTES["/network-exporter"] = NetworkExporterPage;
 ROUTES["/ipsec-exporter"] = IpsecExporterPage;
@@ -20,12 +20,12 @@ ROUTES["/github-exporter"] = GitHubExporterPage;
 ROUTES["/libvirt-exporter"] = LibvirtExporterPage;
 ROUTES["/relay-exporter"] = RelayExporterPage;
 
-function getPath(): string {
+export function getPath(): string {
   const hash = window.location.hash.replace(/^#\/?/, "/");
   return hash === "" ? "/" : hash;
 }
 
-function renderNav(currentPath: string): string {
+export function renderNav(currentPath: string): string {
   const links = [
     { to: "/", label: "Home", exact: true },
     { to: "/network-exporter", label: "Network" },
@@ -49,7 +49,7 @@ function renderNav(currentPath: string): string {
   </nav>`;
 }
 
-function renderFooter(): string {
+export function renderFooter(): string {
   return `<footer class="footer" role="contentinfo">
     <div class="footer-inner">
       <span>v${VERSION}</span>
@@ -65,9 +65,10 @@ function renderFooter(): string {
   </footer>`;
 }
 
-function render(): void {
+export function render(): void {
   const path = getPath();
-  const root = document.getElementById("root")!;
+  const root = document.getElementById("root");
+  if (!root) return;
   const page = path in ROUTES ? ROUTES[path] : ROUTES["/"];
 
   root.innerHTML = `
@@ -79,7 +80,7 @@ function render(): void {
   updateHead(path);
 }
 
-function updateHead(path: string): void {
+export function updateHead(path: string): void {
   const titles: Record<string, string> = Object.create(null);
   titles["/"] = "Prometheus Exporters \u2014 Network, IPsec & Cloudflare";
   titles["/network-exporter"] = "Network Exporter \u2014 Prometheus Exporters";

@@ -76,19 +76,13 @@ export function IpsecExporterPage(): string {
   ];
 
   const renderMetricTable = (metrics: string[][]): string => {
-    if (metrics[0].length === 4) {
-      const rows = metrics
-        .map(([name, type, labels, desc]) => {
-          const labelCell = labels ? `<code>${labels}</code>` : "";
-          return `<tr><td><code>${name}</code></td><td>${type}</td><td>${labelCell}</td><td>${desc}</td></tr>`;
-        })
-        .join("");
-      return `<table><thead><tr><th>Metric</th><th>Type</th><th>Labels</th><th>Description</th></tr></thead><tbody>${rows}</tbody></table>`;
-    }
     const rows = metrics
-      .map(([name, type, desc]) => `<tr><td><code>${name}</code></td><td>${type}</td><td>${desc}</td></tr>`)
+      .map(([name, type, labels, desc]) => {
+        const labelCell = labels ? `<code>${labels}</code>` : "";
+        return `<tr><td><code>${name}</code></td><td>${type}</td><td>${labelCell}</td><td>${desc}</td></tr>`;
+      })
       .join("");
-    return `<table><thead><tr><th>Metric</th><th>Type</th><th>Description</th></tr></thead><tbody>${rows}</tbody></table>`;
+    return `<table><thead><tr><th>Metric</th><th>Type</th><th>Labels</th><th>Description</th></tr></thead><tbody>${rows}</tbody></table>`;
   };
 
   const renderStateTable = (states: string[][]): string => {

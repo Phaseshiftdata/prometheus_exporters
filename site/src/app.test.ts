@@ -1,132 +1,98 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { HomePage } from "./pages/home.js";
-import { NetworkExporterPage } from "./pages/network-exporter.js";
-import { IpsecExporterPage } from "./pages/ipsec-exporter.js";
-import { CloudflareExporterPage } from "./pages/cloudflare-exporter.js";
-import { GitHubExporterPage } from "./pages/github-exporter.js";
-import { LibvirtExporterPage } from "./pages/libvirt-exporter.js";
-import { RelayExporterPage } from "./pages/relay-exporter.js";
 
 /**
- * Tests for the app module's routing, navigation, and footer logic.
+ * Tests for the app module's routing, navigation, footer, and head-management logic.
  *
- * app.ts executes side effects (render + addEventListener) at module top-level,
- * so we replicate its core functions here to test them thoroughly while
- * avoiding import-order issues with jsdom.
+ * We must set up a #root element before importing app.ts because it calls render()
+ * at the top level. The import is at module scope so the jsdom environment must
+ * already have the element when the test file is evaluated.
  */
 
-type PageComponent = () => string;
+// Prepare DOM before app.ts is imported (top-level side effects need #root).
+document.body.innerHTML = '<div id="root"></div>';
 
-const ROUTES: Record<string, PageComponent> = Object.create(null);
-ROUTES["/"] = HomePage;
-ROUTES["/network-exporter"] = NetworkExporterPage;
-ROUTES["/ipsec-exporter"] = IpsecExporterPage;
-ROUTES["/cloudflare-exporter"] = CloudflareExporterPage;
-ROUTES["/github-exporter"] = GitHubExporterPage;
-ROUTES["/libvirt-exporter"] = LibvirtExporterPage;
-ROUTES["/relay-exporter"] = RelayExporterPage;
+import {
+  VERSION,
+  ROUTES,
+  getPath,
+  renderNav,
+  renderFooter,
+  render,
+  updateHead,
+} from "./app.js";
 
-function getPath(hash: string): string {
-  const cleaned = hash.replace(/^#\/?/, "/");
-  return cleaned === "" ? "/" : cleaned;
-}
+/* ------------------------------------------------------------------ */
+/*  VERSION                                                            */
+/* ------------------------------------------------------------------ */
 
-function renderNav(currentPath: string): string {
-  const links = [
-    { to: "/", label: "Home", exact: true },
-    { to: "/network-exporter", label: "Network" },
-    { to: "/ipsec-exporter", label: "IPsec" },
-    { to: "/cloudflare-exporter", label: "Cloudflare" },
-    { to: "/github-exporter", label: "GitHub" },
-    { to: "/libvirt-exporter", label: "Libvirt" },
-    { to: "/relay-exporter", label: "Relay" },
-  ];
+describe("VERSION", () => {
+  it("is a non-empty semver string", () => {
+    expect(VERSION).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
 
-  const navLinks = links
-    .map((link) => {
-      const isActive = link.exact ? currentPath === link.to : currentPath.startsWith(link.to);
-      return `<a href="#${link.to}" class="${isActive ? "active" : ""}">${link.label}</a>`;
-    })
-    .join("");
+/* ------------------------------------------------------------------ */
+/*  ROUTES                                                             */
+/* ------------------------------------------------------------------ */
 
-  return `<nav class="nav">
-    <a href="#/" class="nav-brand">prometheus_exporters</a>
-    <div class="nav-links">${navLinks}</div>
-  </nav>`;
-}
+describe("ROUTES", () => {
+  it("has all expected routes", () => {
+    expect(Object.keys(ROUTES)).toContain("/");
+    expect(Object.keys(ROUTES)).toContain("/network-exporter");
+    expect(Object.keys(ROUTES)).toContain("/ipsec-exporter");
+    expect(Object.keys(ROUTES)).toContain("/cloudflare-exporter");
+    expect(Object.keys(ROUTES)).toContain("/github-exporter");
+    expect(Object.keys(ROUTES)).toContain("/libvirt-exporter");
+    expect(Object.keys(ROUTES)).toContain("/relay-exporter");
+  });
 
-function renderFooter(version: string): string {
-  return `<footer class="footer" role="contentinfo">
-    <div class="footer-inner">
-      <span>v${version}</span>
-      <span>MIT License \u00A9 2026 Asymmetric Effort, LLC</span>
-      <span>
-        <a href="https://github.com/phaseshiftdata/prometheus_exporters" target="_blank" rel="noopener noreferrer">GitHub</a>
-        \u00B7
-        <a href="https://github.com/phaseshiftdata/prometheus_exporters/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security</a>
-        \u00B7
-        <a href="https://github.com/phaseshiftdata/prometheus_exporters/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">Contributing</a>
-      </span>
-    </div>
-  </footer>`;
-}
+  it("has exactly 7 routes", () => {
+    expect(Object.keys(ROUTES).length).toBe(7);
+  });
 
-function updateHead(path: string): void {
-  const titles: Record<string, string> = Object.create(null);
-  titles["/"] = "Prometheus Exporters \u2014 Network, IPsec & Cloudflare";
-  titles["/network-exporter"] = "Network Exporter \u2014 Prometheus Exporters";
-  titles["/ipsec-exporter"] = "IPsec Exporter \u2014 Prometheus Exporters";
-  titles["/cloudflare-exporter"] = "Cloudflare Exporter \u2014 Prometheus Exporters";
-  titles["/github-exporter"] = "GitHub Exporter \u2014 Prometheus Exporters";
-  titles["/libvirt-exporter"] = "Libvirt Exporter \u2014 Prometheus Exporters";
-  titles["/relay-exporter"] = "Relay Exporter \u2014 Prometheus Exporters";
+  it("all route components return non-empty HTML strings", () => {
+    for (const [, component] of Object.entries(ROUTES)) {
+      const html = component();
+      expect(html.length).toBeGreaterThan(0);
+      expect(html).toContain("<");
+    }
+  });
+});
 
-  document.title = path in titles ? titles[path] : titles["/"];
-
-  let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement;
-  if (!canonical) {
-    canonical = document.createElement("link");
-    canonical.rel = "canonical";
-    document.head.appendChild(canonical);
-  }
-  canonical.href = `https://prometheus_exporters.phaseshiftdata.com/${path === "/" ? "" : "#" + path}`;
-}
-
-function render(hash: string, version: string): void {
-  const path = getPath(hash);
-  const root = document.getElementById("root")!;
-  const page = path in ROUTES ? ROUTES[path] : ROUTES["/"];
-
-  root.innerHTML = `
-    ${renderNav(path)}
-    <main class="main">${page()}</main>
-    ${renderFooter(version)}
-  `;
-
-  updateHead(path);
-}
+/* ------------------------------------------------------------------ */
+/*  getPath                                                            */
+/* ------------------------------------------------------------------ */
 
 describe("getPath", () => {
-  it("returns / for empty hash", () => {
-    expect(getPath("")).toBe("/");
+  it("returns / when hash is empty", () => {
+    window.location.hash = "";
+    expect(getPath()).toBe("/");
   });
 
   it("returns / for #/", () => {
-    expect(getPath("#/")).toBe("/");
+    window.location.hash = "#/";
+    expect(getPath()).toBe("/");
   });
 
   it("returns /network-exporter for #/network-exporter", () => {
-    expect(getPath("#/network-exporter")).toBe("/network-exporter");
+    window.location.hash = "#/network-exporter";
+    expect(getPath()).toBe("/network-exporter");
   });
 
   it("handles hash without leading slash", () => {
-    expect(getPath("#cloudflare-exporter")).toBe("/cloudflare-exporter");
+    window.location.hash = "#cloudflare-exporter";
+    expect(getPath()).toBe("/cloudflare-exporter");
   });
 
   it("returns / for # alone", () => {
-    expect(getPath("#")).toBe("/");
+    window.location.hash = "#";
+    expect(getPath()).toBe("/");
   });
 });
+
+/* ------------------------------------------------------------------ */
+/*  renderNav                                                          */
+/* ------------------------------------------------------------------ */
 
 describe("renderNav", () => {
   it("includes brand link", () => {
@@ -171,45 +137,60 @@ describe("renderNav", () => {
       expect(activeMatches!.length).toBeGreaterThanOrEqual(1);
     }
   });
+
+  it("does not mark home active for sub-routes", () => {
+    const nav = renderNav("/ipsec-exporter");
+    expect(nav).not.toContain('class="active">Home</a>');
+  });
 });
+
+/* ------------------------------------------------------------------ */
+/*  renderFooter                                                       */
+/* ------------------------------------------------------------------ */
 
 describe("renderFooter", () => {
   it("includes version", () => {
-    const footer = renderFooter("1.2.3");
-    expect(footer).toContain("v1.2.3");
+    const footer = renderFooter();
+    expect(footer).toContain(`v${VERSION}`);
   });
 
   it("includes MIT license", () => {
-    const footer = renderFooter("0.0.0");
+    const footer = renderFooter();
     expect(footer).toContain("MIT License");
     expect(footer).toContain("Asymmetric Effort");
   });
 
   it("includes GitHub, Security, and Contributing links", () => {
-    const footer = renderFooter("0.0.0");
+    const footer = renderFooter();
     expect(footer).toContain("github.com/phaseshiftdata/prometheus_exporters");
     expect(footer).toContain("SECURITY.md");
     expect(footer).toContain("CONTRIBUTING.md");
   });
 
   it("has correct footer role", () => {
-    const footer = renderFooter("0.0.0");
+    const footer = renderFooter();
     expect(footer).toContain('role="contentinfo"');
   });
 
   it("uses noopener noreferrer on external links", () => {
-    const footer = renderFooter("0.0.0");
+    const footer = renderFooter();
     expect(footer).toContain('rel="noopener noreferrer"');
   });
 });
 
+/* ------------------------------------------------------------------ */
+/*  render                                                             */
+/* ------------------------------------------------------------------ */
+
 describe("render", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';
+    document.querySelectorAll('link[rel="canonical"]').forEach((el) => el.remove());
   });
 
   it("renders home page for empty hash", () => {
-    render("", "1.0.0");
+    window.location.hash = "";
+    render();
     const root = document.getElementById("root")!;
     expect(root.innerHTML).toContain("Prometheus Exporters");
     expect(root.innerHTML).toContain("nav");
@@ -217,27 +198,53 @@ describe("render", () => {
   });
 
   it("renders cloudflare page for #/cloudflare-exporter", () => {
-    render("#/cloudflare-exporter", "1.0.0");
+    window.location.hash = "#/cloudflare-exporter";
+    render();
     const root = document.getElementById("root")!;
     expect(root.innerHTML).toContain("Cloudflare Exporter");
   });
 
   it("renders each route successfully", () => {
     for (const route of Object.keys(ROUTES)) {
-      render(`#${route}`, "1.0.0");
+      window.location.hash = `#${route}`;
+      render();
       const root = document.getElementById("root")!;
       expect(root.innerHTML.length).toBeGreaterThan(0);
     }
   });
 
   it("falls back to home for unknown routes", () => {
-    render("#/nonexistent", "1.0.0");
+    window.location.hash = "#/nonexistent";
+    render();
     const root = document.getElementById("root")!;
     expect(root.innerHTML).toContain("Prometheus Exporters");
   });
+
+  it("includes nav, main, and footer sections", () => {
+    window.location.hash = "#/";
+    render();
+    const root = document.getElementById("root")!;
+    expect(root.querySelector("nav")).not.toBeNull();
+    expect(root.querySelector("main")).not.toBeNull();
+    expect(root.querySelector("footer")).not.toBeNull();
+  });
+
+  it("sets document title when rendering", () => {
+    window.location.hash = "#/github-exporter";
+    render();
+    expect(document.title).toContain("GitHub Exporter");
+  });
 });
 
+/* ------------------------------------------------------------------ */
+/*  updateHead                                                         */
+/* ------------------------------------------------------------------ */
+
 describe("updateHead", () => {
+  beforeEach(() => {
+    document.querySelectorAll('link[rel="canonical"]').forEach((el) => el.remove());
+  });
+
   it("sets document title for home page", () => {
     updateHead("/");
     expect(document.title).toContain("Prometheus Exporters");
@@ -286,28 +293,19 @@ describe("updateHead", () => {
     const canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement;
     expect(canonical.href).toContain("#/cloudflare-exporter");
   });
-});
 
-describe("ROUTES", () => {
-  it("has all expected routes", () => {
-    expect(Object.keys(ROUTES)).toContain("/");
-    expect(Object.keys(ROUTES)).toContain("/network-exporter");
-    expect(Object.keys(ROUTES)).toContain("/ipsec-exporter");
-    expect(Object.keys(ROUTES)).toContain("/cloudflare-exporter");
-    expect(Object.keys(ROUTES)).toContain("/github-exporter");
-    expect(Object.keys(ROUTES)).toContain("/libvirt-exporter");
-    expect(Object.keys(ROUTES)).toContain("/relay-exporter");
+  it("sets title for ipsec exporter", () => {
+    updateHead("/ipsec-exporter");
+    expect(document.title).toContain("IPsec Exporter");
   });
 
-  it("has exactly 7 routes", () => {
-    expect(Object.keys(ROUTES).length).toBe(7);
+  it("sets title for libvirt exporter", () => {
+    updateHead("/libvirt-exporter");
+    expect(document.title).toContain("Libvirt Exporter");
   });
 
-  it("all route components return non-empty HTML strings", () => {
-    for (const [, component] of Object.entries(ROUTES)) {
-      const html = component();
-      expect(html.length).toBeGreaterThan(0);
-      expect(html).toContain("<");
-    }
+  it("sets title for relay exporter", () => {
+    updateHead("/relay-exporter");
+    expect(document.title).toContain("Relay Exporter");
   });
 });
