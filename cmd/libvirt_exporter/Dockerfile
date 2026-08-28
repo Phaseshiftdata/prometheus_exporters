@@ -26,13 +26,23 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=1 go build \
-    -trimpath \
-    -ldflags "-s -w \
-        -X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} \
-        -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
-    -o /libvirt_exporter \
-    ./cmd/libvirt_exporter/
+# When COVERAGE=1, build with coverage instrumentation for molecule test coverage
+# collection. Coverage builds omit -s -w to preserve symbols required by the
+# coverage runtime. Note: libvirt_exporter requires CGO_ENABLED=1.
+ARG COVERAGE=0
+RUN if [ "$COVERAGE" = "1" ]; then \
+        CGO_ENABLED=1 go build -cover -coverpkg=./... \
+            -trimpath \
+            -ldflags "-X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
+            -o /libvirt_exporter \
+            ./cmd/libvirt_exporter/; \
+    else \
+        CGO_ENABLED=1 go build \
+            -trimpath \
+            -ldflags "-s -w -X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
+            -o /libvirt_exporter \
+            ./cmd/libvirt_exporter/; \
+    fi
 
 # Collect runtime dependencies into a minimal root filesystem.
 RUN mkdir -p /runtime/lib/x86_64-linux-gnu /runtime/lib64 /runtime/etc/ssl/certs /runtime/usr/lib/x86_64-linux-gnu && \
