@@ -1,9 +1,12 @@
 # Build stage
 FROM ubuntu:26.04 AS build
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ARG VERSION=dev
 ARG COMMIT=unknown
 
+# hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl libcap2-bin && \
     rm -rf /var/lib/apt/lists/*
@@ -46,6 +49,7 @@ RUN if [ "$COVERAGE" = "1" ]; then \
 # Set file capabilities so the binary can use NET_ADMIN and DAC_READ_SEARCH
 # as a non-root user. Same reasoning as network_exporter — the bounding set
 # from --cap-add is not inherited by a non-root process without file caps.
+# hadolint ignore=DL3059
 RUN setcap cap_net_admin,cap_dac_read_search=+eip /ipsec_exporter
 
 # Runtime stage

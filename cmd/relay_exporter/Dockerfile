@@ -1,9 +1,12 @@
 # Build stage
 FROM ubuntu:26.04 AS build
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ARG VERSION=dev
 ARG COMMIT=unknown
 
+# hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
