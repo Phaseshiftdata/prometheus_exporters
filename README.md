@@ -1,5 +1,7 @@
 # Prometheus Exporters
 
+[![codecov](https://codecov.io/gh/phaseshiftdata/prometheus_exporters/graph/badge.svg)](https://codecov.io/gh/phaseshiftdata/prometheus_exporters)
+
 A collection of Prometheus exporter containers for monitoring network
 infrastructure, IPsec tunnels, and Cloudflare services.
 

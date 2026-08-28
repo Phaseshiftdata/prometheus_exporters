@@ -129,6 +129,18 @@ jobs:
             echo "::error::Coverage ${COVERAGE}% is below 98% threshold"
             exit 1
           fi
+      - name: Convert coverage to Cobertura XML
+        run: |
+          go install github.com/boumenot/gocover-cobertura@latest
+          gocover-cobertura < coverage.out > coverage.xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
+        with:
+          files: coverage.xml
+          flags: go
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload coverage artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -289,6 +301,14 @@ jobs:
           name: typescript-coverage
           path: site/coverage/lcov.info
           retention-days: 30
+      - name: Upload TypeScript coverage to Codecov
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
+        with:
+          files: site/coverage/lcov.info
+          flags: typescript
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Build site with relative base for blue-green
         run: cd site && npx vite build --base='./'
       - name: Write version marker for deployment verification

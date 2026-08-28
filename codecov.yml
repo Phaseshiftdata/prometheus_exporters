@@ -1,0 +1,43 @@
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  precision: 1
+  round: down
+  status:
+    project:
+      default:
+        target: 98%
+        threshold: 0.5%
+    patch:
+      default:
+        target: 98%
+
+flags:
+  go:
+    paths:
+      - cmd/
+      - internal/
+      - src/
+    carryforward: true
+    statuses:
+      - type: project
+        target: 98%
+        threshold: 0.5%
+      - type: patch
+        target: 98%
+  typescript:
+    paths:
+      - site/src/
+    carryforward: true
+    statuses:
+      - type: project
+        target: 95%
+        threshold: 0.5%
+      - type: patch
+        target: 95%
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
