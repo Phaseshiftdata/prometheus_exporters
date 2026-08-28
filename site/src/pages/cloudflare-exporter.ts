@@ -55,7 +55,7 @@ export function CloudflareExporterPage(): string {
     ["cloudflare_exporter_graphql_budget_remaining", "gauge", "Remaining GraphQL calls in the current budget window."],
     ["cloudflare_exporter_rest_budget_remaining", "gauge", "Remaining REST calls in the current budget window."],
     ["cloudflare_exporter_discovery_runs_total", "counter", "Total capability discovery runs."],
-    ["cloudflare_exporter_active_collectors", "gauge", "Number of currently active collectors."],
+    ["cloudflare_exporter_collectors_registered", "gauge", "Number of registered collectors by scope."],
     ["cloudflare_exporter_build_info", "gauge", "Build metadata (version, commit, Go version). Value is always 1."],
   ];
 
