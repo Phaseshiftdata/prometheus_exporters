@@ -31,6 +31,11 @@ func coverageHostDir(t *testing.T) string {
 
 // buildCoverageImage builds a Docker image with COVERAGE=1, producing a
 // coverage-instrumented binary. The image is tagged with a "-coverage" suffix.
+//
+// Future improvement: attempt to pull a pre-built coverage image from GHCR
+// (tagged coverage-<sha>) before falling back to a local build. This would
+// avoid rebuilding coverage images in CI when a matching image already exists.
+// See issue #61 for details.
 func buildCoverageImage(t *testing.T, dockerfile, baseTag string) string {
 	t.Helper()
 

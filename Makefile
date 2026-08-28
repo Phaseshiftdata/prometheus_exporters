@@ -1,4 +1,4 @@
-.PHONY: all setup clean lint test cover build build-coverage deploy molecule molecule-coverage cover-merge version version/major version/minor version/patch help check-targets
+.PHONY: all setup clean lint test cover build build-coverage deploy deploy-coverage molecule molecule-coverage cover-merge version version/major version/minor version/patch help check-targets
 
 PROJECT_NAME := prometheus_exporters
 VERSION_FILE := VERSION
@@ -127,6 +127,14 @@ build:
 # ============================================================================
 deploy:
 	@echo "Pushing images to $(REGISTRY) (tag: $(IMAGE_TAG))..."
+	@# Visibility guard: prevent coverage-instrumented images from being
+	@# pushed to production tags (main, v*).
+	@case "$(IMAGE_TAG)" in \
+		coverage-*) \
+			echo "ERROR: coverage-tagged images must not be pushed via 'make deploy'."; \
+			echo "       Use 'make deploy-coverage' instead."; \
+			exit 1;; \
+	esac
 	@for exp in $(EXPORTERS); do \
 		if docker image inspect $(REGISTRY)/$$exp:$(IMAGE_TAG) >/dev/null 2>&1; then \
 			echo "  Pushing $(REGISTRY)/$$exp:$(IMAGE_TAG)..."; \
@@ -136,6 +144,30 @@ deploy:
 		fi; \
 	done
 	@echo "Deploy complete."
+
+# ============================================================================
+# Deploy Coverage - push coverage-instrumented images to GHCR
+# ============================================================================
+COVERAGE_TAG := coverage-$(COMMIT_SHA)
+
+deploy-coverage:
+	@echo "Pushing coverage images to $(REGISTRY) (tag: $(COVERAGE_TAG))..."
+	@# Safety check: only allow coverage-* tags.
+	@case "$(COVERAGE_TAG)" in \
+		coverage-*) ;; \
+		*) echo "ERROR: deploy-coverage requires a coverage-* tag."; exit 1;; \
+	esac
+	@for exp in $(EXPORTERS); do \
+		if docker image inspect $(REGISTRY)/$$exp:coverage >/dev/null 2>&1; then \
+			echo "  Tagging $(REGISTRY)/$$exp:coverage -> $(REGISTRY)/$$exp:$(COVERAGE_TAG)"; \
+			docker tag $(REGISTRY)/$$exp:coverage $(REGISTRY)/$$exp:$(COVERAGE_TAG); \
+			echo "  Pushing $(REGISTRY)/$$exp:$(COVERAGE_TAG)..."; \
+			docker push $(REGISTRY)/$$exp:$(COVERAGE_TAG); \
+		else \
+			echo "  Skipping $$exp (coverage image not found)"; \
+		fi; \
+	done
+	@echo "Coverage deploy complete."
 
 # ============================================================================
 # Molecule - end-to-end container tests
@@ -252,7 +284,7 @@ MANUAL_TARGETS := setup clean version version/major version/minor version/patch 
 # commands rather than through make. "all" is the default target aliasing
 # "build"; the rest are run directly in CI (e.g., "go vet" covers "lint",
 # "go test -coverprofile" covers "test" and "cover").
-CI_EQUIVALENT_TARGETS := all lint test cover molecule build-coverage molecule-coverage cover-merge
+CI_EQUIVALENT_TARGETS := all lint test cover molecule build-coverage molecule-coverage cover-merge deploy-coverage
 
 check-targets:
 	@echo "Checking Makefile target coverage in CI..."
@@ -302,7 +334,8 @@ help:
 	@echo "  test               Run all tests (unit, integration, e2e)"
 	@echo "  build              Build container images tagged with policy"
 	@echo "  build-coverage     Build coverage-instrumented container images"
-	@echo "  deploy             Push container images to GHCR"
+	@echo "  deploy             Push container images to GHCR (rejects coverage tags)"
+	@echo "  deploy-coverage    Push coverage-instrumented images to GHCR"
 	@echo "  cover              Run unit test coverage and gate on 98%% threshold"
 	@echo "  cover-merge        Merge unit and molecule coverage profiles"
 	@echo "  molecule           Run molecule end-to-end container tests"
