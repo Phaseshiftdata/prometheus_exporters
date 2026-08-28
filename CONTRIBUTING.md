@@ -61,6 +61,69 @@ make test
 make build
 ```
 
+## Coverage
+
+This project enforces comprehensive test coverage across all surfaces. Every
+tracked file is classified in `.coverage-policy.yml` — CI fails if an
+unclassified file appears.
+
+### Coverage classifications
+
+| Category | Meaning | Examples |
+|---|---|---|
+| `line_coverable` | Measured by instrumentation tools | Go source (`cmd/`, `internal/`, `src/`), TypeScript source (`site/src/`) |
+| `obligation_covered` | Verified by assertion inventory | Dockerfiles (hadolint + molecule), Makefile (check-targets), SQL migrations (pgTAP) |
+| `exempt` | Not measured, with documented reason | Workflows, test code, docs, config files, static assets |
+
+### Running coverage locally
+
+```bash
+# Go unit test coverage (gates on 98%)
+make cover
+
+# Merge unit + molecule coverage profiles
+make cover-merge
+
+# Site TypeScript coverage (gates on 95%)
+cd site && npx vitest run --coverage
+
+# Verify all files are classified in .coverage-policy.yml
+make check-coverage-policy
+```
+
+### Codecov flags and floors
+
+Coverage is uploaded to Codecov with two flags:
+
+- **`go`** — covers `cmd/`, `internal/`, `src/`. Floor: **98%**.
+- **`typescript`** — covers `site/src/`. Floor: **95%**.
+
+Floors are configured in `codecov.yml`. The ratchet only goes up: if coverage
+improves past the floor, the new level becomes the effective minimum. Codecov
+will fail the PR status check if coverage drops below the floor.
+
+### Adding coverage for new surfaces
+
+**New Go exporter:**
+1. Add source under `cmd/<name>/` and `internal/<name>/` or `src/<name>/`.
+2. Write unit tests achieving >= 98% coverage.
+3. Add a `Dockerfile` in `cmd/<name>/` (it will be covered by hadolint and molecule).
+4. These paths are already classified as `line_coverable` or `obligation_covered`.
+
+**New site page:**
+1. Add source under `site/src/pages/<name>.ts`.
+2. Add a unit test `site/src/pages/<name>.test.ts`.
+3. The path is already classified under `site/src/` as `line_coverable`.
+
+**New SQL migration:**
+1. Add the migration file under `src/github/db/migrations/`.
+2. Add corresponding pgTAP schema shape or trigger behavior tests.
+3. The path is already classified as `obligation_covered`.
+
+**New top-level file or directory:**
+1. Add an entry in `.coverage-policy.yml` under the appropriate category.
+2. Run `make check-coverage-policy` to verify no unclassified files remain.
+
 ## Coding Standards
 
 - Follow standard Go conventions and `gofmt` formatting

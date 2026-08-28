@@ -1,4 +1,4 @@
-.PHONY: all setup clean lint test cover build build-coverage deploy deploy-coverage molecule molecule-coverage cover-merge version version/major version/minor version/patch help check-targets
+.PHONY: all setup clean lint test cover build build-coverage deploy deploy-coverage molecule molecule-coverage cover-merge version version/major version/minor version/patch help check-targets check-coverage-policy
 
 PROJECT_NAME := prometheus_exporters
 VERSION_FILE := VERSION
@@ -284,7 +284,7 @@ MANUAL_TARGETS := setup clean version version/major version/minor version/patch 
 # commands rather than through make. "all" is the default target aliasing
 # "build"; the rest are run directly in CI (e.g., "go vet" covers "lint",
 # "go test -coverprofile" covers "test" and "cover").
-CI_EQUIVALENT_TARGETS := all lint test cover molecule build-coverage molecule-coverage cover-merge deploy-coverage
+CI_EQUIVALENT_TARGETS := all lint test cover molecule build-coverage molecule-coverage cover-merge deploy-coverage check-coverage-policy
 
 check-targets:
 	@echo "Checking Makefile target coverage in CI..."
@@ -321,6 +321,43 @@ check-targets:
 	echo "All .PHONY targets are covered."
 
 # ============================================================================
+# Check Coverage Policy - verify all tracked files are classified
+# ============================================================================
+check-coverage-policy:
+	@echo "Checking coverage policy classification..."
+	@POLICY=".coverage-policy.yml"; \
+	if [ ! -f "$$POLICY" ]; then \
+		echo "ERROR: $$POLICY not found"; \
+		exit 1; \
+	fi; \
+	PATTERNS=$$(grep '^\s*- path:' "$$POLICY" | sed 's/.*path:\s*"\(.*\)"/\1/' | sed "s/.*path:\s*'\(.*\)'/\1/"); \
+	FAIL=0; \
+	TOTAL=0; \
+	MATCHED=0; \
+	while IFS= read -r f; do \
+		TOTAL=$$((TOTAL + 1)); \
+		FOUND=0; \
+		while IFS= read -r pat; do \
+			case "$$f" in \
+				$$pat*) FOUND=1; break;; \
+			esac; \
+			if [ "$$f" = "$$pat" ]; then FOUND=1; break; fi; \
+		done <<< "$$PATTERNS"; \
+		if [ $$FOUND -eq 0 ]; then \
+			echo "  UNCLASSIFIED: $$f"; \
+			FAIL=1; \
+		else \
+			MATCHED=$$((MATCHED + 1)); \
+		fi; \
+	done < <(git ls-files); \
+	echo "Checked $$TOTAL files: $$MATCHED classified."; \
+	if [ $$FAIL -eq 1 ]; then \
+		echo "FAIL: unclassified files found — update .coverage-policy.yml"; \
+		exit 1; \
+	fi; \
+	echo "All tracked files are classified in .coverage-policy.yml."
+
+# ============================================================================
 # Help
 # ============================================================================
 help:
@@ -341,6 +378,7 @@ help:
 	@echo "  molecule           Run molecule end-to-end container tests"
 	@echo "  molecule-coverage  Run molecule tests with coverage collection"
 	@echo "  check-targets      Verify every .PHONY target is exercised in CI"
+	@echo "  check-coverage-policy  Verify all tracked files are classified"
 	@echo "  version (manual)   Tag v0.0.0 if no semver tags exist, else bump patch"
 	@echo "  version/major (m)  Bump major version and tag"
 	@echo "  version/minor (m)  Bump minor version and tag"
