@@ -826,6 +826,29 @@ func TestRootCmd_DatabasePasswordFile_MissingFile(t *testing.T) {
 	}
 }
 
+func TestRootCmd_DatabasePasswordFile_UnparseableURL(t *testing.T) {
+	// Trigger the url.Parse error path in the password-file branch.
+	pwFile := writeSecretFile(t, "s3cret\n")
+
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--database-url", "://\x7finvalid",
+		"--database-password-file", pwFile,
+		"--github-app-id", "1",
+		"--github-install-id", "1",
+		"--github-key-file", "/nonexistent/key.pem",
+		"--log-level", "error",
+	})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for unparseable database URL")
+	}
+	if !strings.Contains(err.Error(), "parsing --database-url") {
+		t.Fatalf("expected URL parse error, got: %v", err)
+	}
+}
+
 func TestRootCmd_DatabasePasswordFile_ConflictWithInlinePassword(t *testing.T) {
 	pwFile := writeSecretFile(t, "s3cret\n")
 

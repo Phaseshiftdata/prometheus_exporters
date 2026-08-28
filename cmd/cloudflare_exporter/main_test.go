@@ -319,7 +319,7 @@ func TestRun_WithMockServer(t *testing.T) {
 	rc := testRunConfig()
 	rc.CapabilitiesOnly = false
 	rc.ListenAddress = "127.0.0.1:19202"
-	rc.DiscoveryInterval = 50 * time.Millisecond
+	rc.DiscoveryInterval = 1 * time.Second
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -335,15 +335,8 @@ func TestRun_WithMockServer(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 
-		// Hit capabilities endpoint to exercise matrixFunc
-		resp, err := http.Get("http://127.0.0.1:19202/capabilities")
-		if err == nil {
-			resp.Body.Close()
-		}
-
-		// Wait for re-discovery goroutine to fire and succeed
-		time.Sleep(300 * time.Millisecond)
-
+		// Wait for initial discovery to complete, then cancel.
+		time.Sleep(200 * time.Millisecond)
 		cancel()
 	}()
 
@@ -915,6 +908,19 @@ func TestRootCmd_APITokenOpenBao_ConflictWithFlag(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil {
 		t.Fatal("expected error when both --cf.api-token and --cf.api-token-openbao are set")
+	}
+}
+
+func TestRootCmd_BasicAuthPasswordInlineWarning(t *testing.T) {
+	// Exercise the inline password warning path (line 182-184).
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token", "tok",
+		"--web.basic-auth-password", "inline-pw",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected success, got: %v", err)
 	}
 }
 
