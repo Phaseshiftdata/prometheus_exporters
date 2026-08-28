@@ -918,6 +918,19 @@ func TestRootCmd_APITokenOpenBao_ConflictWithFlag(t *testing.T) {
 	}
 }
 
+func TestRootCmd_BasicAuthPasswordInlineWarning(t *testing.T) {
+	// Exercise the inline password warning path (line 182-184).
+	cmd := rootCmd()
+	cmd.SetArgs([]string{
+		"--capabilities",
+		"--cf.api-token", "tok",
+		"--web.basic-auth-password", "inline-pw",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected success, got: %v", err)
+	}
+}
+
 func TestRootCmd_BasicAuthPasswordFile_MissingFile(t *testing.T) {
 	cmd := rootCmd()
 	cmd.SetArgs([]string{

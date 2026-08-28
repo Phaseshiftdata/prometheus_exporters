@@ -1,6 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,6 +174,95 @@ func TestRegisterCollectors_DatasetsNotAvailable(t *testing.T) {
 	}
 
 	// Domain and certificate don't require dataset availability
+	registerCollectors(cfg, client, st, sm, reg, sched, matrix, logger)
+}
+
+func TestRegisterCollectors_DNSRecordsProbeSuccess(t *testing.T) {
+	// Stand up a mock server that makes ProbeDNSRecordsAccess succeed.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// ProbeDNSRecordsAccess issues GET /zones/<id>/dns_records?per_page=1
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/dns_records") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"result":  []map[string]string{},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}))
+	defer ts.Close()
+
+	logger, _ := zap.NewDevelopment()
+	client := cloudflare.NewClient("test-token", 5*time.Second)
+	// Redirect client to our mock server
+	client.SetHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			req.URL.Scheme = "http"
+			req.URL.Host = ts.Listener.Addr().String()
+			return http.DefaultTransport.RoundTrip(req)
+		}),
+	})
+
+	st := store.NewStore(10 * time.Minute)
+	sm := collector.NewSelfMetrics("1.0.0", "abc", "go1.21")
+	reg := prometheus.NewRegistry()
+	gov := governor.NewGovernor(160, 600)
+	sched := scheduler.NewScheduler(gov, logger)
+
+	matrix := discovery.NewCapabilityMatrix()
+	matrix.Accounts = []discovery.AccountInfo{{ID: "acc1", Name: "Test"}}
+	matrix.Zones = []discovery.ZoneInfo{{ID: "z1", Name: "example.com", Plan: "pro", Status: "active"}}
+
+	cfg := &config.Config{
+		ScrapeDelay:       300 * time.Second,
+		TimeWindow:        60 * time.Second,
+		RefreshInterval:   60 * time.Second,
+		CollectorsEnabled: []string{"dns_records"},
+	}
+
+	registerCollectors(cfg, client, st, sm, reg, sched, matrix, logger)
+}
+
+func TestRegisterCollectors_DNSRecordsProbeFails(t *testing.T) {
+	// Stand up a mock server that makes ProbeDNSRecordsAccess fail (403).
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/dns_records") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	logger, _ := zap.NewDevelopment()
+	client := cloudflare.NewClient("test-token", 5*time.Second)
+	client.SetHTTPClient(&http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			req.URL.Scheme = "http"
+			req.URL.Host = ts.Listener.Addr().String()
+			return http.DefaultTransport.RoundTrip(req)
+		}),
+	})
+
+	st := store.NewStore(10 * time.Minute)
+	sm := collector.NewSelfMetrics("1.0.0", "abc", "go1.21")
+	reg := prometheus.NewRegistry()
+	gov := governor.NewGovernor(160, 600)
+	sched := scheduler.NewScheduler(gov, logger)
+
+	matrix := discovery.NewCapabilityMatrix()
+	matrix.Accounts = []discovery.AccountInfo{{ID: "acc1", Name: "Test"}}
+	matrix.Zones = []discovery.ZoneInfo{{ID: "z1", Name: "example.com", Plan: "pro", Status: "active"}}
+
+	cfg := &config.Config{
+		ScrapeDelay:       300 * time.Second,
+		TimeWindow:        60 * time.Second,
+		RefreshInterval:   60 * time.Second,
+		CollectorsEnabled: []string{"dns_records"},
+	}
+
+	// Should not panic; the probe failure should just skip registration.
 	registerCollectors(cfg, client, st, sm, reg, sched, matrix, logger)
 }
 
