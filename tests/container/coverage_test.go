@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // coverageEnabled returns true when COVERAGE_MODE=1 is set.
@@ -95,4 +96,54 @@ func verifyCoverageData(t *testing.T, covDir string) {
 		}
 	}
 	t.Errorf("no coverage data files found in %s (entries: %d)", covDir, len(entries))
+}
+
+// TestCoverageHelpers validates that the coverage helper functions work
+// correctly without requiring Docker.
+func TestCoverageHelpers(t *testing.T) {
+	// coverageEnabled should return false when COVERAGE_MODE is not set.
+	if coverageEnabled() && os.Getenv("COVERAGE_MODE") != "1" {
+		t.Error("coverageEnabled() returned true without COVERAGE_MODE=1")
+	}
+
+	// coverageHostDir should return a valid path.
+	dir := coverageHostDir(t)
+	if dir == "" {
+		t.Error("coverageHostDir() returned empty string")
+	}
+
+	// verifyCoverageData should find files with the cov prefix.
+	covDir := t.TempDir()
+	os.WriteFile(filepath.Join(covDir, "covmeta.abc123"), []byte("test"), 0o644)
+	verifyCoverageData(t, covDir)
+}
+
+// TestCoverageCollection builds a coverage-instrumented image, runs it,
+// and verifies that coverage data is flushed on clean shutdown. This test
+// only runs when both Docker and COVERAGE_MODE=1 are available.
+func TestCoverageCollection(t *testing.T) {
+	skipIfNoDocker(t)
+	if !coverageEnabled() {
+		t.Skip("COVERAGE_MODE not set; run with make molecule-coverage")
+	}
+
+	image := buildCoverageImage(t, "cmd/relay_exporter/Dockerfile", "test-relay-coverage")
+	hostPort := freePort(t)
+
+	containerID, covDir := runContainerWithCoverage(t, image,
+		nil, hostPort, "9100",
+		"--listen-address=0.0.0.0:9100",
+		"--allowed-source=127.0.0.1",
+	)
+
+	baseURL := "http://127.0.0.1:" + hostPort
+	waitForHealthy(t, baseURL+"/", 15*time.Second)
+
+	// Exercise the binary to generate coverage.
+	httpGet(t, baseURL+"/")
+
+	// Clean shutdown flushes coverage data.
+	testCleanShutdown(t, containerID)
+
+	verifyCoverageData(t, covDir)
 }
