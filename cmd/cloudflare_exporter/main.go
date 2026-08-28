@@ -673,6 +673,22 @@ func registerCollectors(
 		}
 	}
 
+	// DNS records collector (REST-based, probe-gated)
+	if isEnabled("dns_records") && len(zoneInfos) > 0 {
+		// Probe the first zone to detect Zone -> DNS: Read permission.
+		if collector.ProbeDNSRecordsAccess(context.Background(), client, zoneInfos[0].ID) {
+			c, err := collector.NewDNSRecordsCollector(client, aggregationStore, selfMetrics, logger, scrapeDelay, timeWindow, refreshInterval, accountIDs, zoneInfos, registry)
+			if err != nil {
+				logger.Error("failed to register dns_records collector", zap.Error(err))
+			} else {
+				sched.Register(c)
+				zoneScoped++
+			}
+		} else {
+			logger.Info("dns_records collector skipped: probe failed (Zone -> DNS: Read permission required)")
+		}
+	}
+
 	selfMetrics.CollectorsReg.WithLabelValues("account").Set(float64(accountScoped))
 	selfMetrics.CollectorsReg.WithLabelValues("zone").Set(float64(zoneScoped))
 

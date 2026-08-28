@@ -255,6 +255,25 @@ The exporter requires a Cloudflare API **token** (not a Global API Key).
 | `dns_query_duration_seconds` | histogram | `zone` | DNS query processing time distribution. |
 | `dns_firewall_queries_total` | counter | `zone`, `cluster`, `response_code` | Total queries handled by DNS Firewall. |
 
+### DNS Record Metrics
+
+| Metric | Type | Labels | Description |
+| --- | --- | --- | --- |
+| `cloudflare_dns_record_info` | gauge | `id`, `zone_name`, `zone_id`, `type`, `name`, `content`, `proxied`, `ttl` | DNS record info metric (constant value 1). Record data is carried in labels for change tracking. |
+| `cloudflare_dns_records_total` | gauge | `zone_name`, `type` | Total number of DNS records per zone and record type. |
+
+These metrics are collected via the REST API (`/zones/{id}/dns_records`)
+and require the `Zone -> DNS: Read` permission. They work on all plan
+levels including Free, independent of GraphQL Analytics availability.
+
+The `cloudflare_dns_record_info` metric enables change tracking: because
+record values are labels, editing a record retires one series and creates
+another. This is alertable with `changes()` or by comparing against
+`offset`.
+
+The `content` label is truncated at 256 bytes to prevent excessively long
+TXT record values (DKIM, SPF) from inflating label size.
+
 ### Domain and Certificate Metrics
 
 | Metric | Type | Labels | Description |
@@ -475,5 +494,6 @@ On Cloudflare's Free plan:
   Cloudflare Registrar.
 - **DNS Firewall metrics** require a DNS Firewall subscription.
 
-The REST-only floor provides zone status, certificate expiration, and
-domain metadata metrics on all plan levels, including Free.
+The REST-only floor provides zone status, certificate expiration, DNS
+record enumeration, and domain metadata metrics on all plan levels,
+including Free.
