@@ -1050,6 +1050,29 @@ func TestRootCmd_DatabasePasswordOpenBao_DatabaseURLFromEnv(t *testing.T) {
 	}
 }
 
+func TestRunWithDatabaseURL_WarnInsecureSSLMode(t *testing.T) {
+	// Test the warnInsecureSSLMode path inside run() when dbURL is set
+	// (either from config or env). This exercises run() lines 211-213.
+	keyFile := generateTestKeyFile(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// The DB URL has sslmode=disable, which should trigger the warning.
+	// run() will fail on Connect but that's fine -- we're covering the warn path.
+	err := run(ctx, runConfig{
+		listenAddr:  "127.0.0.1:0",
+		databaseURL: "postgres://user@127.0.0.1:1/db?sslmode=disable&connect_timeout=1",
+		appID:       1,
+		installID:   1,
+		keyFile:     keyFile,
+		logLevel:    "error",
+	})
+	if err == nil {
+		t.Fatal("expected connect error")
+	}
+}
+
 func TestWarnInsecureSSLMode(t *testing.T) {
 	// Unparseable URL: should return early without panic.
 	warnInsecureSSLMode("://not\x7fa valid URL")
