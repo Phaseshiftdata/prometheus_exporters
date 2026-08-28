@@ -1,4 +1,4 @@
-.PHONY: all setup clean lint test cover build deploy molecule version version/major version/minor version/patch help
+.PHONY: all setup clean lint test cover build build-coverage deploy molecule molecule-coverage cover-merge version version/major version/minor version/patch help
 
 PROJECT_NAME := prometheus_exporters
 VERSION_FILE := VERSION
@@ -68,8 +68,10 @@ test:
 COVERAGE_THRESHOLD := 98.0
 
 cover:
-	@echo "Running test coverage..."
-	@go test -coverprofile=coverage.out -covermode=atomic ./...
+	@echo "Running unit test coverage..."
+	@mkdir -p coverage/unit
+	@go test -coverprofile=coverage/unit.out -covermode=atomic $$(go list ./... | grep -v tests/container)
+	@cp coverage/unit.out coverage.out
 	@COVERAGE=$$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $$3}' | sed 's/%//'); \
 	echo "Total coverage: $${COVERAGE}%"; \
 	if [ $$(echo "$${COVERAGE} < $(COVERAGE_THRESHOLD)" | bc -l) -eq 1 ]; then \
@@ -78,6 +80,27 @@ cover:
 	else \
 		echo "PASS: coverage $${COVERAGE}% meets $(COVERAGE_THRESHOLD)% threshold"; \
 	fi
+
+# ============================================================================
+# Build Coverage - build container images with coverage instrumentation
+# ============================================================================
+build-coverage:
+	@echo "Building coverage-instrumented images..."
+	@for exp in $(EXPORTERS); do \
+		if [ -f "cmd/$$exp/Dockerfile" ]; then \
+			echo "  Building $(REGISTRY)/$$exp:coverage..."; \
+			docker build \
+				-t $(REGISTRY)/$$exp:coverage \
+				-f cmd/$$exp/Dockerfile \
+				--build-arg VERSION=$(VERSION) \
+				--build-arg COMMIT=$(COMMIT_SHA) \
+				--build-arg COVERAGE=1 \
+				.; \
+		else \
+			echo "  Skipping $$exp (no Dockerfile)"; \
+		fi; \
+	done
+	@echo "Coverage build complete."
 
 # ============================================================================
 # Build - build container images
@@ -121,6 +144,45 @@ molecule:
 	@echo "Running molecule container tests..."
 	go test -v -timeout 300s ./tests/container/...
 	@echo "Molecule tests passed."
+
+# ============================================================================
+# Molecule Coverage - run molecule tests with coverage collection
+# ============================================================================
+molecule-coverage:
+	@echo "Running molecule container tests with coverage collection..."
+	@mkdir -p coverage/molecule
+	COVERAGE_MODE=1 GOCOVERDIR_HOST=$$(pwd)/coverage/molecule go test -v -timeout 600s ./tests/container/...
+	@echo "Molecule coverage tests passed."
+
+# ============================================================================
+# Cover Merge - merge unit and molecule coverage profiles
+# ============================================================================
+cover-merge:
+	@echo "Merging unit and molecule coverage..."
+	@mkdir -p coverage/unit coverage/molecule
+	@# Run unit tests and collect coverage.
+	@go test -coverprofile=coverage/unit.out -covermode=atomic $$(go list ./... | grep -v tests/container)
+	@# Convert molecule binary coverage to text format if data exists.
+	@if ls coverage/molecule/cov* 1>/dev/null 2>&1; then \
+		go tool covdata textfmt -i=coverage/molecule -o=coverage/molecule.out; \
+		echo "Molecule coverage converted to text format."; \
+		head -1 coverage/unit.out > coverage/merged.out; \
+		tail -n +2 coverage/unit.out >> coverage/merged.out; \
+		tail -n +2 coverage/molecule.out >> coverage/merged.out; \
+		cp coverage/merged.out coverage.out; \
+		echo "Merged coverage profile written to coverage.out"; \
+	else \
+		echo "No molecule coverage data found; using unit coverage only."; \
+		cp coverage/unit.out coverage.out; \
+	fi
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $$3}' | sed 's/%//'); \
+	echo "Total merged coverage: $${COVERAGE}%"; \
+	if [ $$(echo "$${COVERAGE} < $(COVERAGE_THRESHOLD)" | bc -l) -eq 1 ]; then \
+		echo "FAIL: coverage $${COVERAGE}% is below $(COVERAGE_THRESHOLD)% threshold"; \
+		exit 1; \
+	else \
+		echo "PASS: coverage $${COVERAGE}% meets $(COVERAGE_THRESHOLD)% threshold"; \
+	fi
 
 # ============================================================================
 # Version - semantic version tagging
@@ -191,9 +253,12 @@ help:
 	@echo "  lint             Run all linters (go vet, staticcheck, golangci-lint)"
 	@echo "  test             Run all tests (unit, integration, e2e)"
 	@echo "  build            Build container images tagged with policy"
+	@echo "  build-coverage   Build coverage-instrumented container images"
 	@echo "  deploy           Push container images to GHCR"
-	@echo "  cover            Run test coverage and gate on 98%% threshold"
+	@echo "  cover            Run unit test coverage and gate on 98%% threshold"
+	@echo "  cover-merge      Merge unit and molecule coverage profiles"
 	@echo "  molecule         Run molecule end-to-end container tests"
+	@echo "  molecule-coverage Run molecule tests with coverage collection"
 	@echo "  version          Tag v0.0.0 if no semver tags exist, else bump patch"
 	@echo "  version/major    Bump major version and tag"
 	@echo "  version/minor    Bump minor version and tag"

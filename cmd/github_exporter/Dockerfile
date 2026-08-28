@@ -25,11 +25,23 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build \
-    -trimpath \
-    -ldflags "-s -w -X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
-    -o /github_exporter \
-    ./cmd/github_exporter/
+# When COVERAGE=1, build with coverage instrumentation for molecule test coverage
+# collection. Coverage builds omit -s -w to preserve symbols required by the
+# coverage runtime.
+ARG COVERAGE=0
+RUN if [ "$COVERAGE" = "1" ]; then \
+        CGO_ENABLED=0 go build -cover -coverpkg=./... \
+            -trimpath \
+            -ldflags "-X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
+            -o /github_exporter \
+            ./cmd/github_exporter/; \
+    else \
+        CGO_ENABLED=0 go build \
+            -trimpath \
+            -ldflags "-s -w -X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
+            -o /github_exporter \
+            ./cmd/github_exporter/; \
+    fi
 
 # Runtime stage
 FROM gcr.io/distroless/static-debian12:nonroot

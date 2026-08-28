@@ -25,11 +25,23 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build \
-    -trimpath \
-    -ldflags "-s -w -X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
-    -o /network_exporter \
-    ./cmd/network_exporter/
+# When COVERAGE=1, build with coverage instrumentation for molecule test coverage
+# collection. Coverage builds omit -s -w to preserve symbols required by the
+# coverage runtime.
+ARG COVERAGE=0
+RUN if [ "$COVERAGE" = "1" ]; then \
+        CGO_ENABLED=0 go build -cover -coverpkg=./... \
+            -trimpath \
+            -ldflags "-X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
+            -o /network_exporter \
+            ./cmd/network_exporter/; \
+    else \
+        CGO_ENABLED=0 go build \
+            -trimpath \
+            -ldflags "-s -w -X github.com/phaseshiftdata/prometheus_exporters/src/version.Version=${VERSION} -X github.com/phaseshiftdata/prometheus_exporters/src/version.GitCommit=${COMMIT}" \
+            -o /network_exporter \
+            ./cmd/network_exporter/; \
+    fi
 
 # Set file capabilities so the binary can use NET_ADMIN and DAC_READ_SEARCH
 # as a non-root user. The permitted set must be a subset of the container's
