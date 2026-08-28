@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -114,5 +115,31 @@ func TestPRCollector_Pagination(t *testing.T) {
 	}
 	if len(prs) != 101 {
 		t.Errorf("expected 101 PRs, got %d", len(prs))
+	}
+}
+
+func TestPRCollector_MaxPagesExceeded(t *testing.T) {
+	client := newHTTPTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var batch []map[string]interface{}
+		for i := 0; i < 100; i++ {
+			batch = append(batch, map[string]interface{}{
+				"id":         i + 1,
+				"number":     i + 1,
+				"state":      "open",
+				"user":       map[string]string{"login": "dev"},
+				"created_at": "2026-01-01T00:00:00Z",
+				"updated_at": "2026-01-01T00:00:00Z",
+			})
+		}
+		json.NewEncoder(w).Encode(batch)
+	}))
+
+	collector := &PRCollector{Client: client}
+	_, err := collector.Collect(context.Background(), "org", "repo")
+	if err == nil {
+		t.Fatal("expected error when pagination exceeds maxPages")
+	}
+	if !strings.Contains(err.Error(), "pagination exceeded") {
+		t.Errorf("expected pagination exceeded error, got: %v", err)
 	}
 }

@@ -7,6 +7,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"sync"
 	"testing"
@@ -244,5 +247,39 @@ func TestDefaultTokenRefresh(t *testing.T) {
 	// Expected to fail (no real GitHub App), but the code is exercised.
 	if err == nil {
 		t.Log("surprisingly succeeded without real GitHub App")
+	}
+}
+
+func TestDefaultTokenRefresh_SuccessPath(t *testing.T) {
+	// Use a mock HTTP server that returns a valid installation token to
+	// exercise the success path of defaultTokenRefresh (lines 88-89).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"token":"ghs_test_token_12345","expires_at":"2099-01-01T00:00:00Z"}`)
+	}))
+	defer srv.Close()
+
+	key := generateTestRSAKey(t)
+	auth, err := NewAuthFromKey(1, 1, key)
+	if err != nil {
+		t.Fatalf("NewAuthFromKey() error: %v", err)
+	}
+
+	// Point the transport at our mock server.
+	auth.transport.BaseURL = srv.URL
+
+	fixedTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	auth.nowFunc = func() time.Time { return fixedTime }
+
+	token, expiry, err := auth.defaultTokenRefresh(context.Background())
+	if err != nil {
+		t.Fatalf("defaultTokenRefresh() error: %v", err)
+	}
+	if token != "ghs_test_token_12345" {
+		t.Errorf("expected ghs_test_token_12345, got %s", token)
+	}
+	expectedExpiry := fixedTime.Add(1 * time.Hour)
+	if !expiry.Equal(expectedExpiry) {
+		t.Errorf("expected expiry %v, got %v", expectedExpiry, expiry)
 	}
 }

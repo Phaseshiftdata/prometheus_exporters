@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -116,5 +117,31 @@ func TestRepoCollector_APIError(t *testing.T) {
 	_, err := collector.CollectAll(context.Background(), "my-org")
 	if err == nil {
 		t.Fatal("expected error for 500 response")
+	}
+}
+
+func TestRepoCollector_MaxPagesExceeded(t *testing.T) {
+	client := newHTTPTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		repos := make([]map[string]interface{}, 100)
+		for i := 0; i < 100; i++ {
+			repos[i] = map[string]interface{}{
+				"id":             int64(i + 1),
+				"name":           "repo",
+				"default_branch": "main",
+				"visibility":     "private",
+				"archived":       false,
+				"updated_at":     "2026-01-01T00:00:00Z",
+			}
+		}
+		json.NewEncoder(w).Encode(repos)
+	}))
+
+	collector := &RepoCollector{Client: client}
+	_, err := collector.CollectAll(context.Background(), "my-org")
+	if err == nil {
+		t.Fatal("expected error when pagination exceeds maxPages")
+	}
+	if !strings.Contains(err.Error(), "pagination exceeded") {
+		t.Errorf("expected pagination exceeded error, got: %v", err)
 	}
 }
