@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -246,5 +247,59 @@ func TestTagCollector_ReleasePagination(t *testing.T) {
 	}
 	if tags[0].CreatedAt == nil {
 		t.Error("expected CreatedAt for v2.0.0")
+	}
+}
+
+func TestTagCollector_MaxPagesExceeded(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/org/repo/releases", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	})
+	mux.HandleFunc("/repos/org/repo/tags", func(w http.ResponseWriter, r *http.Request) {
+		var batch []map[string]interface{}
+		for i := 0; i < 100; i++ {
+			batch = append(batch, map[string]interface{}{
+				"name":   fmt.Sprintf("v1.%d.0", i),
+				"commit": map[string]string{"sha": fmt.Sprintf("sha%d", i)},
+			})
+		}
+		json.NewEncoder(w).Encode(batch)
+	})
+
+	client := newHTTPTestClient(t, mux)
+	collector := &TagCollector{Client: client}
+	_, err := collector.Collect(context.Background(), "org", "repo")
+	if err == nil {
+		t.Fatal("expected error when tag pagination exceeds maxPages")
+	}
+	if !strings.Contains(err.Error(), "pagination exceeded") {
+		t.Errorf("expected pagination exceeded error, got: %v", err)
+	}
+}
+
+func TestTagCollector_ReleaseMaxPagesExceeded(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/org/repo/releases", func(w http.ResponseWriter, r *http.Request) {
+		var batch []map[string]interface{}
+		for i := 0; i < 100; i++ {
+			batch = append(batch, map[string]interface{}{
+				"tag_name":     fmt.Sprintf("v1.%d.0", i),
+				"published_at": "2026-01-01T00:00:00Z",
+			})
+		}
+		json.NewEncoder(w).Encode(batch)
+	})
+	mux.HandleFunc("/repos/org/repo/tags", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	})
+
+	client := newHTTPTestClient(t, mux)
+	collector := &TagCollector{Client: client}
+	_, err := collector.Collect(context.Background(), "org", "repo")
+	if err == nil {
+		t.Fatal("expected error when release pagination exceeds maxPages")
+	}
+	if !strings.Contains(err.Error(), "pagination exceeded") {
+		t.Errorf("expected pagination exceeded error, got: %v", err)
 	}
 }

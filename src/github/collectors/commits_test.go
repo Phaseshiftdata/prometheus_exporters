@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -115,5 +116,31 @@ func TestCommitCollector_Pagination(t *testing.T) {
 	}
 	if len(commits) != 101 {
 		t.Errorf("expected 101 commits, got %d", len(commits))
+	}
+}
+
+func TestCommitCollector_MaxPagesExceeded(t *testing.T) {
+	// Always return a full page (100 items) to force pagination past maxPages.
+	client := newHTTPTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var batch []map[string]interface{}
+		for i := 0; i < 100; i++ {
+			batch = append(batch, map[string]interface{}{
+				"sha": fmt.Sprintf("sha-%d", i),
+				"commit": map[string]interface{}{
+					"message": "commit",
+					"author":  map[string]string{"name": "dev", "date": "2026-01-01T00:00:00Z"},
+				},
+			})
+		}
+		json.NewEncoder(w).Encode(batch)
+	}))
+
+	collector := &CommitCollector{Client: client}
+	_, err := collector.Collect(context.Background(), "org", "repo", "main")
+	if err == nil {
+		t.Fatal("expected error when pagination exceeds maxPages")
+	}
+	if !strings.Contains(err.Error(), "pagination exceeded") {
+		t.Errorf("expected pagination exceeded error, got: %v", err)
 	}
 }
