@@ -72,7 +72,7 @@ variables are required.
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--listen-address` | `127.0.0.1:9177` | Address and port the HTTP server listens on. |
-| `--libvirt-uri` | `qemu:///system` | Libvirt connection URI. Use `qemu:///system` for the system daemon or `qemu+tcp://host/system` for remote TCP connections. |
+| `--libvirt-uri` | `qemu:///system` | Libvirt connection URI. Only local URIs are allowed (e.g., `qemu:///system`, `qemu:///session`, `qemu+unix:///system`). Remote transports (`+ssh`, `+tcp`, `+tls`) and URIs containing hostnames are rejected at startup. |
 | `--log-level` | `info` | Log verbosity. One of `debug`, `info`, `warn`, `error`. |
 
 ## Metrics Reference

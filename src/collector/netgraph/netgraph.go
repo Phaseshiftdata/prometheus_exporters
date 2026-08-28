@@ -75,30 +75,56 @@ type edgeKey struct {
 	direction  string
 }
 
+// DefaultMaxEdges is the default maximum number of graph edges to export.
+// This prevents metric cardinality explosion under high connection volume.
+const DefaultMaxEdges = 10000
+
 // netgraphCollector implements collector.Collector for network graph edges.
 type netgraphCollector struct {
-	source ConnectionSource
-	desc   *prometheus.Desc
+	source   ConnectionSource
+	maxEdges int
+	desc     *prometheus.Desc
+	descTrunc *prometheus.Desc
 }
 
 // Compile-time interface check.
 var _ collector.Collector = (*netgraphCollector)(nil)
 
-// New returns a network graph collector backed by real procfs at procPath.
+// New returns a network graph collector backed by real procfs at procPath
+// with the default maximum edge limit.
 func New(procPath string) collector.Collector {
-	return NewWithSource(&procfsSource{procPath: procPath})
+	return NewWithOptions(&procfsSource{procPath: procPath}, DefaultMaxEdges)
+}
+
+// NewWithMax returns a network graph collector with a custom maximum edge limit.
+func NewWithMax(procPath string, maxEdges int) collector.Collector {
+	return NewWithOptions(&procfsSource{procPath: procPath}, maxEdges)
 }
 
 // NewWithSource returns a network graph collector using the provided
 // ConnectionSource, which is useful for injecting mocks in tests.
 func NewWithSource(source ConnectionSource) collector.Collector {
+	return NewWithOptions(source, DefaultMaxEdges)
+}
+
+// NewWithOptions returns a network graph collector with a custom source and max edges.
+func NewWithOptions(source ConnectionSource, maxEdges int) collector.Collector {
+	if maxEdges <= 0 {
+		maxEdges = DefaultMaxEdges
+	}
 	return &netgraphCollector{
-		source: source,
+		source:   source,
+		maxEdges: maxEdges,
 		desc: prometheus.NewDesc(
 			"network_graph_edge",
 			"Presence indicator for a network topology edge; value is always 1.",
 			[]string{"remote_host", "local_port", "direction"},
 			nil,
+		),
+		descTrunc: prometheus.NewDesc(
+			"network_graph_edges_truncated",
+			"Set to 1 when the graph edge count exceeds the maximum limit and output is truncated.",
+			nil, nil,
 		),
 	}
 }
@@ -109,6 +135,7 @@ func (c *netgraphCollector) Name() string { return "netgraph" }
 // Describe sends the metric descriptor to the channel.
 func (c *netgraphCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.desc
+	ch <- c.descTrunc
 }
 
 // isLoopback returns true if the IP should be excluded from graph edges.
@@ -174,7 +201,12 @@ func (c *netgraphCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 
+	emitted := 0
 	for e := range edges {
+		if emitted >= c.maxEdges {
+			ch <- prometheus.MustNewConstMetric(c.descTrunc, prometheus.GaugeValue, 1)
+			return
+		}
 		ch <- prometheus.MustNewConstMetric(
 			c.desc,
 			prometheus.GaugeValue,
@@ -183,5 +215,7 @@ func (c *netgraphCollector) Collect(ch chan<- prometheus.Metric) {
 			e.localPort,
 			e.direction,
 		)
+		emitted++
 	}
+	ch <- prometheus.MustNewConstMetric(c.descTrunc, prometheus.GaugeValue, 0)
 }

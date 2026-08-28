@@ -29,6 +29,8 @@ import (
 	"github.com/phaseshiftdata/prometheus_exporters/src/version"
 )
 
+const maxResponseBytes = 100 * 1024 * 1024 // 100 MiB
+
 func main() {
 	os.Exit(exporter.Execute(rootCmd))
 }
@@ -303,7 +305,7 @@ func proxyHandler(allowedSource string, client *http.Client, sem chan struct{}, 
 		}
 		defer resp.Body.Close()
 
-		body, err := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 		if err != nil {
 			slog.Debug("reading target response failed", "target", target.String(), "error", err, "duration", duration)
 			writeRelayResponse(w, "", 0, 0, duration)

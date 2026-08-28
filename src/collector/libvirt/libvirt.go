@@ -64,16 +64,18 @@ var memoryStatTagNames = map[int32]string{
 }
 
 // LibvirtClient abstracts the libvirt connection interface so the collector
-// can be tested without a real libvirtd daemon.
+// can be tested without a real libvirtd daemon. Domain stats methods accept
+// a UUID (not a name) to avoid TOCTOU races where a domain is destroyed
+// and recreated with the same name between ListDomains and stats collection.
 type LibvirtClient interface {
 	IsAvailable() bool
 	GetHostCPUCount() (uint, error)
 	GetHostMemoryBytes() (uint64, error)
 	GetHostFreeMemoryBytes() (uint64, error)
 	ListDomains() ([]DomainInfo, error)
-	GetDomainMemoryStats(name string) ([]DomainMemoryStat, error)
-	GetDomainBlockStats(name string) ([]DomainBlockStats, error)
-	GetDomainInterfaceStats(name string) ([]DomainInterfaceStats, error)
+	GetDomainMemoryStats(uuid string) ([]DomainMemoryStat, error)
+	GetDomainBlockStats(uuid string) ([]DomainBlockStats, error)
+	GetDomainInterfaceStats(uuid string) ([]DomainInterfaceStats, error)
 }
 
 // libvirtCollector implements collector.Collector for libvirt metrics.
@@ -321,9 +323,9 @@ func (c *libvirtCollector) collectHostMetrics(ch chan<- prometheus.Metric) {
 }
 
 func (c *libvirtCollector) collectDomainMemoryStats(ch chan<- prometheus.Metric, d DomainInfo) {
-	stats, err := c.client.GetDomainMemoryStats(d.Name)
+	stats, err := c.client.GetDomainMemoryStats(d.UUID)
 	if err != nil {
-		slog.Debug("failed to get memory stats", "domain", d.Name, "error", err)
+		slog.Debug("failed to get memory stats", "domain", d.Name, "uuid", d.UUID, "error", err)
 		return
 	}
 
@@ -340,9 +342,9 @@ func (c *libvirtCollector) collectDomainMemoryStats(ch chan<- prometheus.Metric,
 }
 
 func (c *libvirtCollector) collectDomainBlockStats(ch chan<- prometheus.Metric, d DomainInfo) {
-	blockStats, err := c.client.GetDomainBlockStats(d.Name)
+	blockStats, err := c.client.GetDomainBlockStats(d.UUID)
 	if err != nil {
-		slog.Debug("failed to get block stats", "domain", d.Name, "error", err)
+		slog.Debug("failed to get block stats", "domain", d.Name, "uuid", d.UUID, "error", err)
 		return
 	}
 
@@ -356,9 +358,9 @@ func (c *libvirtCollector) collectDomainBlockStats(ch chan<- prometheus.Metric, 
 }
 
 func (c *libvirtCollector) collectDomainInterfaceStats(ch chan<- prometheus.Metric, d DomainInfo) {
-	ifaceStats, err := c.client.GetDomainInterfaceStats(d.Name)
+	ifaceStats, err := c.client.GetDomainInterfaceStats(d.UUID)
 	if err != nil {
-		slog.Debug("failed to get interface stats", "domain", d.Name, "error", err)
+		slog.Debug("failed to get interface stats", "domain", d.Name, "uuid", d.UUID, "error", err)
 		return
 	}
 

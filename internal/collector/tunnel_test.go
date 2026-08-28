@@ -250,6 +250,50 @@ func TestTunnelCollector_BadTimestamp(t *testing.T) {
 	c.Collect(context.Background())
 }
 
+func TestTunnelCollector_GraphQLQueryError(t *testing.T) {
+	// GraphQL endpoint returns 500, REST endpoint succeeds for inventory.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`server error`))
+		} else {
+			w.Write(makeRESTResponse(tunnelRESTResponseData()))
+		}
+	}))
+	defer server.Close()
+
+	ts := newTestSetup(t)
+	client := createTestClient(server)
+	c, _ := NewTunnelCollector(client, ts.store, ts.selfMetrics, ts.logger, 300, 60, 60, []string{"acc1"}, ts.registry)
+
+	if err := c.Collect(context.Background()); err == nil {
+		t.Fatal("expected error when GraphQL query fails")
+	}
+}
+
+func TestTunnelCollector_InventoryUnmarshalError(t *testing.T) {
+	// REST endpoint returns invalid JSON for tunnel inventory.
+	// The inventory error is non-fatal (logged and continued), so Collect
+	// should still succeed.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			w.Write(makeGraphQLResponse(tunnelGraphQLResponseData()))
+		} else {
+			w.Write([]byte(`{"success":true,"errors":[],"messages":[],"result":"not-an-array"}`))
+		}
+	}))
+	defer server.Close()
+
+	ts := newTestSetup(t)
+	client := createTestClient(server)
+	c, _ := NewTunnelCollector(client, ts.store, ts.selfMetrics, ts.logger, 300, 60, 60, []string{"acc1"}, ts.registry)
+
+	// Should not return an error since inventory failure is non-fatal.
+	if err := c.Collect(context.Background()); err != nil {
+		t.Fatalf("expected no error (inventory failure is non-fatal), got: %v", err)
+	}
+}
+
 func TestTunnelCollector_PromBadDimKey(t *testing.T) {
 	ts := newTestSetup(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

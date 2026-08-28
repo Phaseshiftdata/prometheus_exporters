@@ -12,6 +12,23 @@ const testURI = "test:///default"
 // invalidURI is a URI that will always fail to connect.
 const invalidURI = "test:///nonexistent"
 
+// testDomainUUID returns the UUID of the "test" domain from the test driver.
+func testDomainUUID(t *testing.T) string {
+	t.Helper()
+	c := &libvirtClient{uri: testURI}
+	domains, err := c.ListDomains()
+	if err != nil {
+		t.Fatalf("listing domains: %v", err)
+	}
+	for _, d := range domains {
+		if d.Name == "test" {
+			return d.UUID
+		}
+	}
+	t.Fatal("test domain not found in test:///default")
+	return ""
+}
+
 // TestLibvirtClientConnectSuccess verifies that the real libvirtClient can
 // connect to the libvirt test driver.
 func TestLibvirtClientConnectSuccess(t *testing.T) {
@@ -186,8 +203,9 @@ func TestLibvirtClientListDomains(t *testing.T) {
 // test driver.
 func TestLibvirtClientGetDomainMemoryStats(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
+		uuid := testDomainUUID(t)
 		c := &libvirtClient{uri: testURI}
-		stats, err := c.GetDomainMemoryStats("test")
+		stats, err := c.GetDomainMemoryStats(uuid)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -198,7 +216,7 @@ func TestLibvirtClientGetDomainMemoryStats(t *testing.T) {
 
 	t.Run("connect_error", func(t *testing.T) {
 		c := &libvirtClient{uri: invalidURI}
-		_, err := c.GetDomainMemoryStats("test")
+		_, err := c.GetDomainMemoryStats("00000000-0000-0000-0000-000000000000")
 		if err == nil {
 			t.Error("expected error with invalid URI")
 		}
@@ -206,9 +224,9 @@ func TestLibvirtClientGetDomainMemoryStats(t *testing.T) {
 
 	t.Run("domain_not_found", func(t *testing.T) {
 		c := &libvirtClient{uri: testURI}
-		_, err := c.GetDomainMemoryStats("nonexistent-domain")
+		_, err := c.GetDomainMemoryStats("00000000-0000-0000-0000-000000000000")
 		if err == nil {
-			t.Error("expected error for nonexistent domain")
+			t.Error("expected error for nonexistent domain UUID")
 		}
 	})
 }
@@ -217,8 +235,9 @@ func TestLibvirtClientGetDomainMemoryStats(t *testing.T) {
 // test driver.
 func TestLibvirtClientGetDomainBlockStats(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
+		uuid := testDomainUUID(t)
 		c := &libvirtClient{uri: testURI}
-		stats, err := c.GetDomainBlockStats("test")
+		stats, err := c.GetDomainBlockStats(uuid)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -234,7 +253,7 @@ func TestLibvirtClientGetDomainBlockStats(t *testing.T) {
 
 	t.Run("connect_error", func(t *testing.T) {
 		c := &libvirtClient{uri: invalidURI}
-		_, err := c.GetDomainBlockStats("test")
+		_, err := c.GetDomainBlockStats("00000000-0000-0000-0000-000000000000")
 		if err == nil {
 			t.Error("expected error with invalid URI")
 		}
@@ -242,9 +261,9 @@ func TestLibvirtClientGetDomainBlockStats(t *testing.T) {
 
 	t.Run("domain_not_found", func(t *testing.T) {
 		c := &libvirtClient{uri: testURI}
-		_, err := c.GetDomainBlockStats("nonexistent-domain")
+		_, err := c.GetDomainBlockStats("00000000-0000-0000-0000-000000000000")
 		if err == nil {
-			t.Error("expected error for nonexistent domain")
+			t.Error("expected error for nonexistent domain UUID")
 		}
 	})
 }
@@ -253,8 +272,9 @@ func TestLibvirtClientGetDomainBlockStats(t *testing.T) {
 // with the test driver.
 func TestLibvirtClientGetDomainInterfaceStats(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
+		uuid := testDomainUUID(t)
 		c := &libvirtClient{uri: testURI}
-		stats, err := c.GetDomainInterfaceStats("test")
+		stats, err := c.GetDomainInterfaceStats(uuid)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -270,7 +290,7 @@ func TestLibvirtClientGetDomainInterfaceStats(t *testing.T) {
 
 	t.Run("connect_error", func(t *testing.T) {
 		c := &libvirtClient{uri: invalidURI}
-		_, err := c.GetDomainInterfaceStats("test")
+		_, err := c.GetDomainInterfaceStats("00000000-0000-0000-0000-000000000000")
 		if err == nil {
 			t.Error("expected error with invalid URI")
 		}
@@ -278,9 +298,9 @@ func TestLibvirtClientGetDomainInterfaceStats(t *testing.T) {
 
 	t.Run("domain_not_found", func(t *testing.T) {
 		c := &libvirtClient{uri: testURI}
-		_, err := c.GetDomainInterfaceStats("nonexistent-domain")
+		_, err := c.GetDomainInterfaceStats("00000000-0000-0000-0000-000000000000")
 		if err == nil {
-			t.Error("expected error for nonexistent domain")
+			t.Error("expected error for nonexistent domain UUID")
 		}
 	})
 }
@@ -365,11 +385,12 @@ func TestParseInterfaces(t *testing.T) {
 	})
 }
 
-// TestLibvirtClientLookupDomain verifies the lookupDomain helper.
-func TestLibvirtClientLookupDomain(t *testing.T) {
+// TestLibvirtClientLookupDomainByUUID verifies the lookupDomainByUUID helper.
+func TestLibvirtClientLookupDomainByUUID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
+		uuid := testDomainUUID(t)
 		c := &libvirtClient{uri: testURI}
-		conn, dom, err := c.lookupDomain("test")
+		conn, dom, err := c.lookupDomainByUUID(uuid)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -379,7 +400,7 @@ func TestLibvirtClientLookupDomain(t *testing.T) {
 
 	t.Run("connect_error", func(t *testing.T) {
 		c := &libvirtClient{uri: invalidURI}
-		_, _, err := c.lookupDomain("test")
+		_, _, err := c.lookupDomainByUUID("00000000-0000-0000-0000-000000000000")
 		if err == nil {
 			t.Error("expected error with invalid URI")
 		}
@@ -387,9 +408,9 @@ func TestLibvirtClientLookupDomain(t *testing.T) {
 
 	t.Run("not_found", func(t *testing.T) {
 		c := &libvirtClient{uri: testURI}
-		_, _, err := c.lookupDomain("nonexistent")
+		_, _, err := c.lookupDomainByUUID("00000000-0000-0000-0000-000000000000")
 		if err == nil {
-			t.Error("expected error for nonexistent domain")
+			t.Error("expected error for nonexistent domain UUID")
 		}
 	})
 }
@@ -397,8 +418,9 @@ func TestLibvirtClientLookupDomain(t *testing.T) {
 // TestLibvirtClientGetDomainXMLDevices verifies the getDomainXML helper.
 func TestLibvirtClientGetDomainXMLDevices(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
+		uuid := testDomainUUID(t)
 		c := &libvirtClient{uri: testURI}
-		conn, dom, xmlDesc, err := c.getDomainXML("test")
+		conn, dom, xmlDesc, err := c.getDomainXML(uuid)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -411,7 +433,7 @@ func TestLibvirtClientGetDomainXMLDevices(t *testing.T) {
 
 	t.Run("connect_error", func(t *testing.T) {
 		c := &libvirtClient{uri: invalidURI}
-		_, _, _, err := c.getDomainXML("test")
+		_, _, _, err := c.getDomainXML("00000000-0000-0000-0000-000000000000")
 		if err == nil {
 			t.Error("expected error with invalid URI")
 		}
@@ -419,9 +441,9 @@ func TestLibvirtClientGetDomainXMLDevices(t *testing.T) {
 
 	t.Run("not_found", func(t *testing.T) {
 		c := &libvirtClient{uri: testURI}
-		_, _, _, err := c.getDomainXML("nonexistent")
+		_, _, _, err := c.getDomainXML("00000000-0000-0000-0000-000000000000")
 		if err == nil {
-			t.Error("expected error for nonexistent domain")
+			t.Error("expected error for nonexistent domain UUID")
 		}
 	})
 }
@@ -455,6 +477,48 @@ func TestExtractDomainInfo(t *testing.T) {
 	if d.MaxMemory == 0 {
 		t.Error("expected non-zero MaxMemory")
 	}
+}
+
+// TestRedactURI verifies the redactURI helper.
+func TestRedactURI(t *testing.T) {
+	t.Run("strips_userinfo", func(t *testing.T) {
+		got := redactURI("qemu+ssh://admin:secret@host/system")
+		if got == "" {
+			t.Fatal("expected non-empty result")
+		}
+		if testing.Verbose() {
+			t.Logf("redacted: %s", got)
+		}
+		// Must not contain the password.
+		for _, bad := range []string{"admin", "secret"} {
+			if contains(got, bad) {
+				t.Errorf("redacted URI should not contain %q, got %q", bad, got)
+			}
+		}
+	})
+
+	t.Run("invalid_uri", func(t *testing.T) {
+		got := redactURI("://\x7f bad uri")
+		if got != "<invalid-uri>" {
+			t.Errorf("expected '<invalid-uri>', got %q", got)
+		}
+	})
+
+	t.Run("no_userinfo", func(t *testing.T) {
+		got := redactURI("qemu:///system")
+		if got != "qemu:///system" {
+			t.Errorf("expected 'qemu:///system', got %q", got)
+		}
+	})
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
 }
 
 // TestXMLDomainParsing verifies the XML domain parsing structures work correctly.

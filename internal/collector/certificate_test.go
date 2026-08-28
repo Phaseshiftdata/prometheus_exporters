@@ -128,6 +128,24 @@ func TestCertificateCollector_Error(t *testing.T) {
 	}
 }
 
+func TestCertificateCollector_UnmarshalError(t *testing.T) {
+	// Return a REST response where "result" is a JSON string instead of an
+	// array, triggering the json.Unmarshal error path in fetchCertificatePacks.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"success":true,"errors":[],"messages":[],"result":"not-an-array"}`))
+	}))
+	defer server.Close()
+
+	ts := newTestSetup(t)
+	client := createTestClient(server)
+	zones := []ZoneInfo{{ID: "z1", Name: "example.com"}}
+	c, _ := NewCertificateCollector(client, ts.store, ts.selfMetrics, ts.logger, 300, 60, 60, []string{"acc1"}, zones, ts.registry)
+
+	if err := c.Collect(context.Background()); err == nil {
+		t.Fatal("expected unmarshal error")
+	}
+}
+
 func TestCertificateCollector_EmptyPacks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write(makeRESTResponse([]interface{}{}))

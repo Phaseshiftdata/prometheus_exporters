@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/phaseshiftdata/prometheus_exporters/internal/cloudflare"
@@ -59,6 +60,7 @@ type CertificateCollector struct {
 
 	descExpiration *prometheus.Desc
 
+	mu sync.RWMutex
 	// gauges holds the latest scraped values.
 	gauges []certGauge
 }
@@ -149,7 +151,9 @@ func (c *CertificateCollector) Collect(ctx context.Context) error {
 	}
 
 	// Atomically replace gauge snapshot.
+	c.mu.Lock()
 	c.gauges = newGauges
+	c.mu.Unlock()
 
 	duration := time.Since(start)
 	if lastErr != nil {
@@ -201,6 +205,8 @@ func (p *certificatePromCollector) Describe(ch chan<- *prometheus.Desc) {
 // Collect implements prometheus.Collector. It reads the latest gauge snapshot
 // and emits them as constant metrics.
 func (p *certificatePromCollector) Collect(ch chan<- prometheus.Metric) {
+	p.inner.mu.RLock()
+	defer p.inner.mu.RUnlock()
 	for _, g := range p.inner.gauges {
 		ch <- prometheus.MustNewConstMetric(
 			p.inner.descExpiration,

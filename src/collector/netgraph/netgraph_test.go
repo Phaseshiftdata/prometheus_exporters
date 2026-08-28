@@ -43,7 +43,7 @@ func TestBasicInbound(t *testing.T) {
 # TYPE network_graph_edge gauge
 network_graph_edge{direction="inbound",local_port="80",remote_host="192.168.1.5"} 1
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edge"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -61,7 +61,7 @@ func TestBasicOutbound(t *testing.T) {
 # TYPE network_graph_edge gauge
 network_graph_edge{direction="outbound",local_port="443",remote_host="203.0.113.10"} 1
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edge"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -100,7 +100,7 @@ func TestLoopbackFiltering(t *testing.T) {
 # HELP network_graph_edge Presence indicator for a network topology edge; value is always 1.
 # TYPE network_graph_edge gauge
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edge"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -119,7 +119,7 @@ func TestZeroIPFiltering(t *testing.T) {
 # HELP network_graph_edge Presence indicator for a network topology edge; value is always 1.
 # TYPE network_graph_edge gauge
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edge"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -137,7 +137,7 @@ func TestLocalIPLoopbackFiltering(t *testing.T) {
 # HELP network_graph_edge Presence indicator for a network topology edge; value is always 1.
 # TYPE network_graph_edge gauge
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edge"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -155,7 +155,7 @@ func TestLocalIPZeroFiltering(t *testing.T) {
 # HELP network_graph_edge Presence indicator for a network topology edge; value is always 1.
 # TYPE network_graph_edge gauge
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edge"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -179,7 +179,7 @@ func TestMixedInboundOutbound(t *testing.T) {
 network_graph_edge{direction="inbound",local_port="80",remote_host="192.168.1.5"} 1
 network_graph_edge{direction="outbound",local_port="443",remote_host="203.0.113.10"} 1
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edge"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -203,7 +203,7 @@ func TestUDPConnections(t *testing.T) {
 network_graph_edge{direction="inbound",local_port="53",remote_host="192.168.1.100"} 1
 network_graph_edge{direction="outbound",local_port="53",remote_host="8.8.8.8"} 1
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edge"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -216,7 +216,7 @@ func TestEmptyConnectionList(t *testing.T) {
 # HELP network_graph_edge Presence indicator for a network topology edge; value is always 1.
 # TYPE network_graph_edge gauge
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edge"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -252,6 +252,40 @@ func TestMultipleRemoteHostsSameLocalPort(t *testing.T) {
 	}
 }
 
+func TestNewWithMax(t *testing.T) {
+	dir := t.TempDir()
+	netDir := filepath.Join(dir, "net")
+	if err := os.MkdirAll(netDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Create minimal proc files so the constructor doesn't fail.
+	for _, f := range []string{"tcp", "tcp6", "udp", "udp6"} {
+		if err := os.WriteFile(filepath.Join(netDir, f), []byte("header\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	c := NewWithMax(dir, 100)
+	if c == nil {
+		t.Fatal("NewWithMax() returned nil")
+	}
+	if c.Name() != "netgraph" {
+		t.Errorf("expected name 'netgraph', got %q", c.Name())
+	}
+}
+
+func TestNewWithOptionsNegativeMax(t *testing.T) {
+	src := &mockSource{}
+	c := NewWithOptions(src, -1)
+	if c == nil {
+		t.Fatal("NewWithOptions(-1) returned nil")
+	}
+	nc := c.(*netgraphCollector)
+	if nc.maxEdges != DefaultMaxEdges {
+		t.Errorf("expected maxEdges=%d for negative input, got %d", DefaultMaxEdges, nc.maxEdges)
+	}
+}
+
 func TestName(t *testing.T) {
 	c := NewWithSource(&mockSource{})
 	if c.Name() != "netgraph" {
@@ -261,13 +295,16 @@ func TestName(t *testing.T) {
 
 func TestDescribe(t *testing.T) {
 	c := NewWithSource(&mockSource{})
-	ch := make(chan *prometheus.Desc, 1)
+	ch := make(chan *prometheus.Desc, 2)
 	c.Describe(ch)
 	close(ch)
 
-	desc := <-ch
-	if desc == nil {
-		t.Fatal("expected a descriptor, got nil")
+	count := 0
+	for range ch {
+		count++
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 descriptors, got %d", count)
 	}
 }
 
@@ -312,7 +349,7 @@ func TestNewWithFakeProcfs(t *testing.T) {
 # TYPE network_graph_edge gauge
 network_graph_edge{direction="inbound",local_port="80",remote_host="192.168.0.5"} 1
 `
-	if err := testutil.CollectAndCompare(c, strings.NewReader(expected)); err != nil {
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edge"); err != nil {
 		t.Errorf("metric mismatch: %v", err)
 	}
 }
@@ -371,6 +408,38 @@ func TestProcfsSourceListConnectionsUDPError(t *testing.T) {
 	_, err := src.ListConnections()
 	if err == nil {
 		t.Error("expected error when UDP files are missing")
+	}
+}
+
+func TestCollectTruncation(t *testing.T) {
+	src := &mockSource{
+		connections: []Connection{
+			// Listen on port 80.
+			{LocalIP: "10.0.0.1", LocalPort: 80, RemoteIP: "0.0.0.0", RemotePort: 0, State: "LISTEN", Protocol: "tcp"},
+			// Three inbound connections from distinct remote hosts -> 3 unique edges.
+			{LocalIP: "10.0.0.1", LocalPort: 80, RemoteIP: "192.168.1.1", RemotePort: 45000, State: "ESTABLISHED", Protocol: "tcp"},
+			{LocalIP: "10.0.0.1", LocalPort: 80, RemoteIP: "192.168.1.2", RemotePort: 45001, State: "ESTABLISHED", Protocol: "tcp"},
+			{LocalIP: "10.0.0.1", LocalPort: 80, RemoteIP: "192.168.1.3", RemotePort: 45002, State: "ESTABLISHED", Protocol: "tcp"},
+		},
+	}
+
+	// maxEdges=1 with 3 unique edges: only 1 emitted, truncated=1.
+	c := NewWithOptions(src, 1)
+
+	// Verify truncated metric is set to 1.
+	expected := `
+# HELP network_graph_edges_truncated Set to 1 when the graph edge count exceeds the maximum limit and output is truncated.
+# TYPE network_graph_edges_truncated gauge
+network_graph_edges_truncated 1
+`
+	if err := testutil.CollectAndCompare(c, strings.NewReader(expected), "network_graph_edges_truncated"); err != nil {
+		t.Errorf("truncation metric mismatch: %v", err)
+	}
+
+	// Verify only 1 edge metric is emitted.
+	edgeCount := testutil.CollectAndCount(c, "network_graph_edge")
+	if edgeCount != 1 {
+		t.Errorf("expected 1 edge emitted, got %d", edgeCount)
 	}
 }
 

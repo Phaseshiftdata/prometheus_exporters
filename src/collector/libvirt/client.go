@@ -4,9 +4,21 @@ import (
 	"encoding/xml"
 	"fmt"
 	"log/slog"
+	"net/url"
 
 	lv "libvirt.org/go/libvirt"
 )
+
+// redactURI strips any userinfo (username:password) from a URI before
+// it appears in error messages or logs.
+func redactURI(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "<invalid-uri>"
+	}
+	u.User = nil
+	return u.String()
+}
 
 // Compile-time interface check.
 var _ LibvirtClient = (*libvirtClient)(nil)
@@ -77,7 +89,7 @@ type libvirtClient struct {
 func (c *libvirtClient) connect() (*lv.Connect, error) {
 	conn, err := lv.NewConnect(c.uri)
 	if err != nil {
-		return nil, fmt.Errorf("libvirt connect %s: %w", c.uri, err)
+		return nil, fmt.Errorf("libvirt connect %s: %w", redactURI(c.uri), err)
 	}
 	return conn, nil
 }
@@ -187,26 +199,28 @@ func extractDomainInfo(dom *lv.Domain) (DomainInfo, error) {
 	}, nil
 }
 
-// lookupDomain connects and looks up a domain by name. The caller must call
-// conn.Close() and dom.Free() when done.
-func (c *libvirtClient) lookupDomain(name string) (*lv.Connect, *lv.Domain, error) {
+// lookupDomainByUUID connects and looks up a domain by UUID. Using UUID
+// instead of name eliminates TOCTOU races where a domain is destroyed and
+// recreated with the same name between ListDomains and stats collection.
+// The caller must call conn.Close() and dom.Free() when done.
+func (c *libvirtClient) lookupDomainByUUID(uuid string) (*lv.Connect, *lv.Domain, error) {
 	conn, err := c.connect()
 	if err != nil {
 		return nil, nil, err
 	}
-	dom, err := conn.LookupDomainByName(name)
+	dom, err := conn.LookupDomainByUUIDString(uuid)
 	if err != nil {
 		conn.Close()
-		return nil, nil, fmt.Errorf("lookup domain %s: %w", name, err)
+		return nil, nil, fmt.Errorf("lookup domain uuid %s: %w", uuid, err)
 	}
 	return conn, dom, nil
 }
 
-// getDomainXML calls lookupDomain and then retrieves the domain XML. On any
-// failure after lookup, it closes the connection and frees the domain before
-// returning the error.
-func (c *libvirtClient) getDomainXML(name string) (*lv.Connect, *lv.Domain, string, error) {
-	conn, dom, err := c.lookupDomain(name)
+// getDomainXML calls lookupDomainByUUID and then retrieves the domain XML.
+// On any failure after lookup, it closes the connection and frees the
+// domain before returning the error.
+func (c *libvirtClient) getDomainXML(uuid string) (*lv.Connect, *lv.Domain, string, error) {
+	conn, dom, err := c.lookupDomainByUUID(uuid)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -214,13 +228,13 @@ func (c *libvirtClient) getDomainXML(name string) (*lv.Connect, *lv.Domain, stri
 	if err != nil {
 		dom.Free()
 		conn.Close()
-		return nil, nil, "", fmt.Errorf("get xml desc %s: %w", name, err)
+		return nil, nil, "", fmt.Errorf("get xml desc uuid %s: %w", uuid, err)
 	}
 	return conn, dom, xmlDesc, nil
 }
 
-func (c *libvirtClient) GetDomainMemoryStats(name string) ([]DomainMemoryStat, error) {
-	conn, dom, err := c.lookupDomain(name)
+func (c *libvirtClient) GetDomainMemoryStats(uuid string) ([]DomainMemoryStat, error) {
+	conn, dom, err := c.lookupDomainByUUID(uuid)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +243,7 @@ func (c *libvirtClient) GetDomainMemoryStats(name string) ([]DomainMemoryStat, e
 
 	stats, err := dom.MemoryStats(uint32(lv.DOMAIN_MEMORY_STAT_NR), 0)
 	if err != nil {
-		return nil, fmt.Errorf("memory stats %s: %w", name, err)
+		return nil, fmt.Errorf("memory stats uuid %s: %w", uuid, err)
 	}
 
 	var result []DomainMemoryStat
@@ -242,8 +256,8 @@ func (c *libvirtClient) GetDomainMemoryStats(name string) ([]DomainMemoryStat, e
 	return result, nil
 }
 
-func (c *libvirtClient) GetDomainBlockStats(name string) ([]DomainBlockStats, error) {
-	conn, dom, xmlDesc, err := c.getDomainXML(name)
+func (c *libvirtClient) GetDomainBlockStats(uuid string) ([]DomainBlockStats, error) {
+	conn, dom, xmlDesc, err := c.getDomainXML(uuid)
 	if err != nil {
 		return nil, err
 	}
@@ -252,14 +266,14 @@ func (c *libvirtClient) GetDomainBlockStats(name string) ([]DomainBlockStats, er
 
 	devs, err := parseDisks(xmlDesc)
 	if err != nil {
-		return nil, fmt.Errorf("parse disks %s: %w", name, err)
+		return nil, fmt.Errorf("parse disks uuid %s: %w", uuid, err)
 	}
 
 	var result []DomainBlockStats
 	for _, dev := range devs {
 		bs, err := dom.BlockStats(dev)
 		if err != nil {
-			slog.Debug("failed to get block stats for device", "domain", name, "device", dev, "error", err)
+			slog.Debug("failed to get block stats for device", "uuid", uuid, "device", dev, "error", err)
 			continue
 		}
 		result = append(result, DomainBlockStats{
@@ -274,8 +288,8 @@ func (c *libvirtClient) GetDomainBlockStats(name string) ([]DomainBlockStats, er
 	return result, nil
 }
 
-func (c *libvirtClient) GetDomainInterfaceStats(name string) ([]DomainInterfaceStats, error) {
-	conn, dom, xmlDesc, err := c.getDomainXML(name)
+func (c *libvirtClient) GetDomainInterfaceStats(uuid string) ([]DomainInterfaceStats, error) {
+	conn, dom, xmlDesc, err := c.getDomainXML(uuid)
 	if err != nil {
 		return nil, err
 	}
@@ -284,14 +298,14 @@ func (c *libvirtClient) GetDomainInterfaceStats(name string) ([]DomainInterfaceS
 
 	devs, err := parseInterfaces(xmlDesc)
 	if err != nil {
-		return nil, fmt.Errorf("parse interfaces %s: %w", name, err)
+		return nil, fmt.Errorf("parse interfaces uuid %s: %w", uuid, err)
 	}
 
 	var result []DomainInterfaceStats
 	for _, dev := range devs {
 		is, err := dom.InterfaceStats(dev)
 		if err != nil {
-			slog.Debug("failed to get interface stats for device", "domain", name, "interface", dev, "error", err)
+			slog.Debug("failed to get interface stats for device", "uuid", uuid, "interface", dev, "error", err)
 			continue
 		}
 		result = append(result, DomainInterfaceStats{

@@ -114,6 +114,8 @@ variables are required.
 | `--proc-path` | `/proc` | Path to procfs mount. Set to `/host/proc` when running in a container with the host's procfs bind-mounted. |
 | `--sys-path` | `/sys` | Path to sysfs mount. Set to `/host/sys` when running in a container with the host's sysfs bind-mounted. |
 | `--log-level` | `info` | Log verbosity. One of `debug`, `info`, `warn`, `error`. |
+| `--max-arp-entries` | `10000` | Maximum number of ARP entries to export per scrape. Prevents metric cardinality explosion under ARP flooding. When exceeded, output is truncated and `network_arp_entries_truncated` is set to 1. |
+| `--max-graph-edges` | `10000` | Maximum number of network graph edges to export per scrape. Prevents metric cardinality explosion under high connection volume. When exceeded, output is truncated and `network_graph_edges_truncated` is set to 1. |
 
 ## Collectors
 
@@ -127,6 +129,7 @@ one gauge per entry.
 | Metric | Type | Labels | Description |
 | --- | --- | --- | --- |
 | `network_arp_entry` | gauge | `ip`, `mac`, `device`, `state` | ARP table entry; value is always 1. |
+| `network_arp_entries_truncated` | gauge | *(none)* | Set to 1 when the ARP table exceeds `--max-arp-entries` and output is truncated; 0 otherwise. |
 
 **Label values:**
 
@@ -184,6 +187,7 @@ active TCP and UDP connections relative to local listening ports.
 | Metric | Type | Labels | Description |
 | --- | --- | --- | --- |
 | `network_graph_edge` | gauge | `remote_host`, `local_port`, `direction` | Presence indicator for a network topology edge; value is always 1. |
+| `network_graph_edges_truncated` | gauge | *(none)* | Set to 1 when the edge count exceeds `--max-graph-edges` and output is truncated; 0 otherwise. |
 
 **Label values:**
 

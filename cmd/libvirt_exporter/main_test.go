@@ -85,7 +85,7 @@ func (m *mockLibvirtClient) ListDomains() ([]libvirt.DomainInfo, error) {
 	}, nil
 }
 
-func (m *mockLibvirtClient) GetDomainMemoryStats(name string) ([]libvirt.DomainMemoryStat, error) {
+func (m *mockLibvirtClient) GetDomainMemoryStats(uuid string) ([]libvirt.DomainMemoryStat, error) {
 	return []libvirt.DomainMemoryStat{
 		{Tag: 6, Val: 2097152},   // actual
 		{Tag: 4, Val: 524288},    // unused
@@ -94,13 +94,13 @@ func (m *mockLibvirtClient) GetDomainMemoryStats(name string) ([]libvirt.DomainM
 	}, nil
 }
 
-func (m *mockLibvirtClient) GetDomainBlockStats(name string) ([]libvirt.DomainBlockStats, error) {
+func (m *mockLibvirtClient) GetDomainBlockStats(uuid string) ([]libvirt.DomainBlockStats, error) {
 	return []libvirt.DomainBlockStats{
 		{Device: "vda", RdBytes: 1048576, WrBytes: 2097152, RdReq: 1000, WrReq: 2000},
 	}, nil
 }
 
-func (m *mockLibvirtClient) GetDomainInterfaceStats(name string) ([]libvirt.DomainInterfaceStats, error) {
+func (m *mockLibvirtClient) GetDomainInterfaceStats(uuid string) ([]libvirt.DomainInterfaceStats, error) {
 	return []libvirt.DomainInterfaceStats{
 		{Name: "vnet0", RxBytes: 10485760, TxBytes: 5242880, RxPackets: 10000, TxPackets: 5000, RxErrs: 0, TxErrs: 0},
 	}, nil
@@ -117,13 +117,13 @@ func (m *mockLibvirtClientUnavailable) GetHostFreeMemoryBytes() (uint64, error) 
 func (m *mockLibvirtClientUnavailable) ListDomains() ([]libvirt.DomainInfo, error) {
 	return nil, fmt.Errorf("unavailable")
 }
-func (m *mockLibvirtClientUnavailable) GetDomainMemoryStats(name string) ([]libvirt.DomainMemoryStat, error) {
+func (m *mockLibvirtClientUnavailable) GetDomainMemoryStats(uuid string) ([]libvirt.DomainMemoryStat, error) {
 	return nil, fmt.Errorf("unavailable")
 }
-func (m *mockLibvirtClientUnavailable) GetDomainBlockStats(name string) ([]libvirt.DomainBlockStats, error) {
+func (m *mockLibvirtClientUnavailable) GetDomainBlockStats(uuid string) ([]libvirt.DomainBlockStats, error) {
 	return nil, fmt.Errorf("unavailable")
 }
-func (m *mockLibvirtClientUnavailable) GetDomainInterfaceStats(name string) ([]libvirt.DomainInterfaceStats, error) {
+func (m *mockLibvirtClientUnavailable) GetDomainInterfaceStats(uuid string) ([]libvirt.DomainInterfaceStats, error) {
 	return nil, fmt.Errorf("unavailable")
 }
 
@@ -536,5 +536,60 @@ func TestE2EContinueOnError(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestValidateLocalURI(t *testing.T) {
+	tests := []struct {
+		name    string
+		uri     string
+		wantErr bool
+	}{
+		{"default local", "qemu:///system", false},
+		{"session local", "qemu:///session", false},
+		{"unix transport", "qemu+unix:///system", false},
+		{"test driver", "test:///default", false},
+		{"lxc local", "lxc:///", false},
+		{"ssh remote", "qemu+ssh://remotehost/system", true},
+		{"tcp remote", "qemu+tcp://remotehost/system", true},
+		{"tls remote", "qemu+tls://remotehost/system", true},
+		{"hostname no transport", "qemu://remotehost/system", true},
+		{"ssh with user", "qemu+ssh://user@remotehost/system", true},
+		{"libssh remote", "qemu+libssh://remotehost/system", true},
+		{"libssh2 remote", "qemu+libssh2://remotehost/system", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateLocalURI(tt.uri)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateLocalURI(%q) error = %v, wantErr %v", tt.uri, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateLocalURI_UnparseableURI(t *testing.T) {
+	// A URI that url.Parse cannot handle should return an error.
+	err := validateLocalURI("://\x7f bad uri")
+	if err == nil {
+		t.Fatal("expected error for unparseable URI")
+	}
+	if !strings.Contains(err.Error(), "invalid libvirt URI") {
+		t.Errorf("expected 'invalid libvirt URI' error, got: %v", err)
+	}
+}
+
+func TestRunRejectsRemoteURI(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := run(ctx, "127.0.0.1:0", "qemu+ssh://remotehost/system", "info", reg)
+	if err == nil {
+		t.Error("expected error for remote URI")
+	}
+	if !strings.Contains(err.Error(), "remote transport") {
+		t.Errorf("error should mention remote transport, got: %v", err)
 	}
 }

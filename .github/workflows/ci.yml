@@ -8,12 +8,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: write
-  packages: write
-  pages: write
-  id-token: write
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -30,11 +24,13 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Install C dependencies (libvirt for CGO)
@@ -57,8 +53,14 @@ jobs:
         run: govulncheck ./... || echo "::warning::govulncheck found vulnerabilities (may require Go patch release)"
         continue-on-error: true
       - name: Install leakdetector
+        env:
+          LEAKDETECTOR_VERSION: "v0.0.15"
+          LEAKDETECTOR_SHA256: "d194af9e15355f3a2c045db785c72b9430cfe7fa0fbf53542e4fff5410499034"
         run: |
-          curl -sL "https://github.com/asymmetric-effort/leakdetector/releases/latest/download/leakdetector_linux_amd64.tar.gz" | tar xz -C /usr/local/bin/
+          curl -sfL "https://github.com/asymmetric-effort/leakdetector/releases/download/${LEAKDETECTOR_VERSION}/leakdetector_linux_amd64.tar.gz" -o /tmp/leakdetector.tar.gz
+          echo "${LEAKDETECTOR_SHA256}  /tmp/leakdetector.tar.gz" | sha256sum -c -
+          tar xz -C /usr/local/bin/ -f /tmp/leakdetector.tar.gz
+          rm /tmp/leakdetector.tar.gz
       - name: Run leakdetector
         run: |
           leakdetector --skip-history --format json --report ld-findings.json || true
@@ -75,6 +77,8 @@ jobs:
   test:
     needs: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     services:
       postgres:
         image: postgres:15-alpine
@@ -89,8 +93,8 @@ jobs:
         ports:
           - 5432:5432
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Install C dependencies (libvirt for CGO)
@@ -114,7 +118,7 @@ jobs:
             exit 1
           fi
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage
           path: coverage.out
@@ -125,11 +129,14 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Install C dependencies (libvirt for CGO)
@@ -141,7 +148,7 @@ jobs:
             sleep 5
           done
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -149,9 +156,9 @@ jobs:
       - name: Determine image tag
         id: tag
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
             echo "tag=main" >> "$GITHUB_OUTPUT"
           else
             echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
@@ -192,9 +199,11 @@ jobs:
   site-build:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install site dependencies
@@ -208,7 +217,7 @@ jobs:
       - name: Run pre-deployment e2e tests
         run: cd site && npx playwright test e2e/site.spec.ts
       - name: Upload site build artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: site-build
           path: site/dist/
@@ -220,13 +229,15 @@ jobs:
   deploy-staging:
     needs: site-build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: gh-pages
           path: gh-pages
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: site-build
           path: new-build
@@ -249,10 +260,12 @@ jobs:
   pdv-staging:
     needs: deploy-staging
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install Playwright
@@ -284,9 +297,11 @@ jobs:
   promote-to-production:
     needs: pdv-staging
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: gh-pages
           path: gh-pages
@@ -311,10 +326,12 @@ jobs:
   pdv-production:
     needs: promote-to-production
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install Playwright

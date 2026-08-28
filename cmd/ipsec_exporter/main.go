@@ -34,13 +34,15 @@ func rootCmd() *cobra.Command {
 	var sysPath string
 	var viciSocket string
 	var logLevel string
+	var maxArpEntries int
+	var maxGraphEdges int
 
 	cmd := &cobra.Command{
 		Use:     "ipsec_exporter",
 		Short:   "Prometheus exporter for host network and IPsec metrics",
 		Version: exporter.VersionString(),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), listenAddr, procPath, sysPath, viciSocket, logLevel, nil)
+			return run(cmd.Context(), listenAddr, procPath, sysPath, viciSocket, logLevel, maxArpEntries, maxGraphEdges, nil)
 		},
 	}
 
@@ -49,18 +51,20 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&sysPath, "sys-path", "/sys", "Path to sysfs mount")
 	cmd.Flags().StringVar(&viciSocket, "vici-socket", "/var/run/charon.vici", "Path to strongSwan VICI socket")
 	cmd.Flags().StringVar(&logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	cmd.Flags().IntVar(&maxArpEntries, "max-arp-entries", arp.DefaultMaxEntries, "Maximum ARP entries to export (prevents cardinality explosion)")
+	cmd.Flags().IntVar(&maxGraphEdges, "max-graph-edges", netgraph.DefaultMaxEdges, "Maximum network graph edges to export (prevents cardinality explosion)")
 
 	return cmd
 }
 
-func run(ctx context.Context, listenAddr, procPath, sysPath, viciSocket, logLevel string, reg *prometheus.Registry) error {
+func run(ctx context.Context, listenAddr, procPath, sysPath, viciSocket, logLevel string, maxArpEntries, maxGraphEdges int, reg *prometheus.Registry) error {
 	exporter.SetupLogging(logLevel)
 
 	if reg == nil {
 		reg = prometheus.NewRegistry()
 	}
 
-	for _, c := range createAllCollectors(procPath, sysPath, viciSocket) {
+	for _, c := range createAllCollectors(procPath, sysPath, viciSocket, maxArpEntries, maxGraphEdges) {
 		if err := reg.Register(c); err != nil {
 			return fmt.Errorf("registering collector %s: %w", c.Name(), err)
 		}
@@ -70,11 +74,11 @@ func run(ctx context.Context, listenAddr, procPath, sysPath, viciSocket, logLeve
 	return exporter.Serve(ctx, listenAddr, "IPsec Exporter", reg)
 }
 
-func createAllCollectors(procPath, sysPath, viciSocket string) []collector.Collector {
+func createAllCollectors(procPath, sysPath, viciSocket string, maxArpEntries, maxGraphEdges int) []collector.Collector {
 	return []collector.Collector{
-		arp.New(),
+		arp.NewWithMax(maxArpEntries),
 		iface.New(sysPath),
-		netgraph.New(procPath),
+		netgraph.NewWithMax(procPath, maxGraphEdges),
 		conntrack.New(procPath),
 		firewall.New(),
 		ipsec.New(viciSocket),

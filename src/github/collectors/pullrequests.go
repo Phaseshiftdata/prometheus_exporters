@@ -3,6 +3,7 @@ package collectors
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -30,7 +31,7 @@ func (c *PRCollector) Collect(ctx context.Context, org, repo string) ([]PullRequ
 	page := 1
 
 	for {
-		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls?state=all&per_page=100&page=%d", org, repo, page)
+		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls?state=all&per_page=100&page=%d", url.PathEscape(org), url.PathEscape(repo), page)
 		var batch []apiPullRequest
 		modified, err := c.Client.Get(ctx, url, &batch)
 		if err != nil {
@@ -72,6 +73,9 @@ func (c *PRCollector) Collect(ctx context.Context, org, repo string) ([]PullRequ
 			break
 		}
 		page++
+		if page > maxPages {
+			return nil, fmt.Errorf("pull requests pagination exceeded %d pages", maxPages)
+		}
 	}
 
 	return prs, nil

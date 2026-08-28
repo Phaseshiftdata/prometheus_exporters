@@ -161,6 +161,13 @@ func rootCmd() *cobra.Command {
 				resolvedAPIToken = v
 			}
 
+			// Warn when secrets are passed via CLI flags — they are visible
+			// in /proc/<pid>/cmdline. Prefer --cf.api-token-file or
+			// --cf.api-token-openbao.
+			if apiToken != "" && apiTokenFile == "" && apiTokenOpenBao == "" {
+				slog.Warn("API token passed via --cf.api-token flag; visible in /proc/cmdline. Use --cf.api-token-file or --cf.api-token-openbao instead")
+			}
+
 			resolvedBasicAuthPassword := basicAuthPassword
 			if basicAuthPasswordFile != "" {
 				if resolvedBasicAuthPassword != "" {
@@ -171,6 +178,9 @@ func rootCmd() *cobra.Command {
 					return fmt.Errorf("--web.basic-auth-password-file: %w", err)
 				}
 				resolvedBasicAuthPassword = v
+			}
+			if basicAuthPassword != "" && basicAuthPasswordFile == "" {
+				slog.Warn("basic auth password passed via --web.basic-auth-password flag; visible in /proc/cmdline. Use --web.basic-auth-password-file instead")
 			}
 
 			rc := runConfig{
@@ -296,6 +306,7 @@ func run(ctx context.Context, rc runConfig, clientOverride ...*cfclient.Client) 
 	} else {
 		client = cfclient.NewClient(cfg.APIToken, cfg.RequestTimeout)
 	}
+	defer client.Close()
 
 	// Create aggregation store
 	pruneAfter := 2 * cfg.ScrapeDelay
@@ -314,7 +325,7 @@ func run(ctx context.Context, rc runConfig, clientOverride ...*cfclient.Client) 
 		TLSCertFile:       cfg.TLSCertFile,
 		TLSKeyFile:        cfg.TLSKeyFile,
 		BasicAuthUsername:  cfg.BasicAuthUsername,
-		BasicAuthPassword: cfg.BasicAuthPassword,
+		BasicAuthPassword: []byte(cfg.BasicAuthPassword),
 	}, logger)
 
 	// Register self-metrics

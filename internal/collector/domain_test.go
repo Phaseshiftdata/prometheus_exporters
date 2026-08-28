@@ -127,6 +127,21 @@ func TestDomainCollector_Error(t *testing.T) {
 	}
 }
 
+func TestDomainCollector_UnmarshalError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"success":true,"errors":[],"messages":[],"result":"not-an-array"}`))
+	}))
+	defer server.Close()
+
+	ts := newTestSetup(t)
+	client := createTestClient(server)
+	c, _ := NewDomainCollector(client, ts.store, ts.selfMetrics, ts.logger, 300, 60, 60, []string{"acc1"}, nil, ts.registry)
+
+	if err := c.Collect(context.Background()); err == nil {
+		t.Fatal("expected unmarshal error")
+	}
+}
+
 func TestDomainCollector_AutoRenewValues(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write(makeRESTResponse(domainRESTResponseData()))

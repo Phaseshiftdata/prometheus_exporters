@@ -19,6 +19,13 @@ const (
 
 	// RESTV4Base is the base URL for the Cloudflare REST v4 API.
 	RESTV4Base = "https://api.cloudflare.com/client/v4"
+
+	// maxResponseBytes caps how much of a response body is read.
+	maxResponseBytes = 100 << 20 // 100 MiB
+
+	// maxErrorBodyLog caps how much of an error response body is stored
+	// in APIError to prevent upstream content from flooding logs.
+	maxErrorBodyLog = 512
 )
 
 // deniedDimensions contains dimension names that must never appear in a GraphQL query.
@@ -39,16 +46,24 @@ var deniedDimensions = map[string]bool{
 // Client communicates with the Cloudflare APIs.
 type Client struct {
 	httpClient *http.Client
-	apiToken   string
+	apiToken   []byte
 	userAgent  string
 }
 
-// NewClient creates a new Cloudflare API client.
+// NewClient creates a new Cloudflare API client. The token is copied
+// into a []byte so the caller's string can be garbage-collected.
 func NewClient(apiToken string, timeout time.Duration) *Client {
 	return &Client{
 		httpClient: &http.Client{Timeout: timeout},
-		apiToken:   apiToken,
+		apiToken:   []byte(apiToken),
 		userAgent:  "cloudflare_exporter/1.0",
+	}
+}
+
+// Close zeroes the API token from memory.
+func (c *Client) Close() {
+	for i := range c.apiToken {
+		c.apiToken[i] = 0
 	}
 }
 
@@ -99,7 +114,7 @@ func (c *Client) QueryGraphQL(ctx context.Context, query string, variables map[s
 		return nil, nil, fmt.Errorf("creating GraphQL request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.apiToken)
+	req.Header.Set("Authorization", "Bearer "+string(c.apiToken))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
 
@@ -109,7 +124,7 @@ func (c *Client) QueryGraphQL(ctx context.Context, query string, variables map[s
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, resp.Header, fmt.Errorf("reading GraphQL response: %w", err)
 	}
@@ -124,7 +139,7 @@ func (c *Client) QueryGraphQL(ctx context.Context, query string, variables map[s
 	if resp.StatusCode != http.StatusOK {
 		return nil, resp.Header, &APIError{
 			StatusCode: resp.StatusCode,
-			Body:       string(respBody),
+			Body:       truncateErrorBody(string(respBody)),
 		}
 	}
 
@@ -145,7 +160,7 @@ func (c *Client) RESTGet(ctx context.Context, path string) (json.RawMessage, htt
 		return nil, nil, fmt.Errorf("creating REST request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.apiToken)
+	req.Header.Set("Authorization", "Bearer "+string(c.apiToken))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
 
@@ -155,7 +170,7 @@ func (c *Client) RESTGet(ctx context.Context, path string) (json.RawMessage, htt
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, resp.Header, fmt.Errorf("reading REST response: %w", err)
 	}
@@ -170,7 +185,7 @@ func (c *Client) RESTGet(ctx context.Context, path string) (json.RawMessage, htt
 	if resp.StatusCode != http.StatusOK {
 		return nil, resp.Header, &APIError{
 			StatusCode: resp.StatusCode,
-			Body:       string(body),
+			Body:       truncateErrorBody(string(body)),
 		}
 	}
 
@@ -230,6 +245,15 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("API error (HTTP %d): %s", e.StatusCode, e.Body)
 }
 
+// truncateErrorBody returns at most maxErrorBodyLog bytes of s to prevent
+// upstream error content from flooding logs.
+func truncateErrorBody(s string) string {
+	if len(s) <= maxErrorBodyLog {
+		return s
+	}
+	return s[:maxErrorBodyLog] + "...(truncated)"
+}
+
 // ValidateDimensions checks that no denied dimension names are present.
 // This is the enforcement mechanism for NFR-3 (privacy).
 func ValidateDimensions(dimensions []string) error {
@@ -248,8 +272,8 @@ func IsDeniedDimension(name string) bool {
 
 // RedactToken replaces any occurrence of the API token in a string with [REDACTED].
 func (c *Client) RedactToken(s string) string {
-	if c.apiToken == "" {
+	if len(c.apiToken) == 0 {
 		return s
 	}
-	return strings.ReplaceAll(s, c.apiToken, "[REDACTED]")
+	return strings.ReplaceAll(s, string(c.apiToken), "[REDACTED]")
 }

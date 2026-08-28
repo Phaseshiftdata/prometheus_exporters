@@ -9,7 +9,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
@@ -18,6 +20,44 @@ import (
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/libvirt"
 	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
 )
+
+// allowedTransports lists the libvirt URI transport suffixes that target
+// the local hypervisor only.  Remote transports like +ssh, +tcp, +tls
+// are rejected.
+var allowedTransports = map[string]bool{
+	"":      true, // e.g. qemu:///system
+	"+unix": true, // e.g. qemu+unix:///system
+}
+
+// validateLocalURI ensures the libvirt URI targets only the local
+// hypervisor.  It rejects URIs that contain a hostname or use a remote
+// transport (ssh, tcp, tls).
+func validateLocalURI(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid libvirt URI %q: %w", raw, err)
+	}
+
+	// The scheme is "driver+transport" (e.g. "qemu+ssh", "qemu+unix", "qemu").
+	// Extract the transport suffix after the first "+".
+	scheme := u.Scheme
+	transport := ""
+	if idx := strings.Index(scheme, "+"); idx >= 0 {
+		transport = scheme[idx:]
+	}
+
+	if !allowedTransports[transport] {
+		return fmt.Errorf("libvirt URI %q uses remote transport %q; only local connections are allowed", raw, transport)
+	}
+
+	// A local URI has an empty authority: qemu:///system (three slashes).
+	// A remote URI has a hostname: qemu+ssh://host/system.
+	if u.Host != "" {
+		return fmt.Errorf("libvirt URI %q contains hostname %q; only local connections are allowed", raw, u.Host)
+	}
+
+	return nil
+}
 
 func main() {
 	os.Exit(exporter.Execute(rootCmd))
@@ -46,6 +86,10 @@ func rootCmd() *cobra.Command {
 
 func run(ctx context.Context, listenAddr, libvirtURI, logLevel string, reg *prometheus.Registry) error {
 	exporter.SetupLogging(logLevel)
+
+	if err := validateLocalURI(libvirtURI); err != nil {
+		return err
+	}
 
 	if reg == nil {
 		reg = prometheus.NewRegistry()

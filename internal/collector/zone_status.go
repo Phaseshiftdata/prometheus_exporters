@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/phaseshiftdata/prometheus_exporters/internal/cloudflare"
@@ -42,6 +43,8 @@ type ZoneStatusCollector struct {
 
 	accountIDs []string
 	zones      []ZoneInfo
+
+	mu         sync.RWMutex
 	zoneStatus []ZoneStatusInfo
 
 	descStatus *prometheus.Desc
@@ -127,7 +130,9 @@ func (c *ZoneStatusCollector) Collect(ctx context.Context) error {
 // UpdateZoneStatus replaces the zone status data. This can be called when
 // discovery refreshes the zone list.
 func (c *ZoneStatusCollector) UpdateZoneStatus(zoneStatus []ZoneStatusInfo) {
+	c.mu.Lock()
 	c.zoneStatus = zoneStatus
+	c.mu.Unlock()
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +155,8 @@ func (p *zoneStatusPromCollector) Describe(ch chan<- *prometheus.Desc) {
 // Collect implements prometheus.Collector. It reads the zone status snapshot
 // and emits them as constant metrics.
 func (p *zoneStatusPromCollector) Collect(ch chan<- prometheus.Metric) {
+	p.inner.mu.RLock()
+	defer p.inner.mu.RUnlock()
 	for _, z := range p.inner.zoneStatus {
 		ch <- prometheus.MustNewConstMetric(
 			p.inner.descStatus,
