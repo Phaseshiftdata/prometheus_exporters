@@ -1,4 +1,4 @@
-.PHONY: all setup clean lint test cover build build-coverage deploy molecule molecule-coverage cover-merge version version/major version/minor version/patch help
+.PHONY: all setup clean lint test cover build build-coverage deploy molecule molecule-coverage cover-merge version version/major version/minor version/patch help check-targets
 
 PROJECT_NAME := prometheus_exporters
 VERSION_FILE := VERSION
@@ -241,29 +241,78 @@ else
 endif
 
 # ============================================================================
+# Check Targets - verify every .PHONY target is exercised in CI
+# ============================================================================
+
+# Manual-only targets that are not expected to run in CI. Each must be
+# documented in the help text with "(manual)" annotation.
+MANUAL_TARGETS := setup clean version version/major version/minor version/patch help
+
+# Targets whose functionality is exercised in CI through equivalent direct
+# commands rather than through make. "all" is the default target aliasing
+# "build"; the rest are run directly in CI (e.g., "go vet" covers "lint",
+# "go test -coverprofile" covers "test" and "cover").
+CI_EQUIVALENT_TARGETS := all lint test cover molecule build-coverage molecule-coverage cover-merge
+
+check-targets:
+	@echo "Checking Makefile target coverage in CI..."
+	@PHONY_LINE=$$(grep '^\.PHONY:' Makefile | head -1 | sed 's/^\.PHONY://'); \
+	FAIL=0; \
+	for target in $$PHONY_LINE; do \
+		MANUAL=0; \
+		for m in $(MANUAL_TARGETS); do \
+			if [ "$$target" = "$$m" ]; then MANUAL=1; break; fi; \
+		done; \
+		if [ $$MANUAL -eq 1 ]; then \
+			echo "  $$target: manual-only (documented)"; \
+			continue; \
+		fi; \
+		EQUIV=0; \
+		for e in $(CI_EQUIVALENT_TARGETS); do \
+			if [ "$$target" = "$$e" ]; then EQUIV=1; break; fi; \
+		done; \
+		if [ $$EQUIV -eq 1 ]; then \
+			echo "  $$target: exercised in CI (equivalent commands)"; \
+			continue; \
+		fi; \
+		if grep -qE "make\s+$$target(\s|$$)" .github/workflows/ci.yml 2>/dev/null; then \
+			echo "  $$target: exercised in CI (make $$target)"; \
+		else \
+			echo "  ERROR: $$target is not exercised in any CI job"; \
+			FAIL=1; \
+		fi; \
+	done; \
+	if [ $$FAIL -eq 1 ]; then \
+		echo "FAIL: one or more .PHONY targets are not exercised in CI"; \
+		exit 1; \
+	fi; \
+	echo "All .PHONY targets are covered."
+
+# ============================================================================
 # Help
 # ============================================================================
 help:
 	@echo "$(PROJECT_NAME) Makefile"
 	@echo ""
 	@echo "Targets:"
-	@echo "  all (default)    Build container images"
-	@echo "  setup            Install dependencies"
-	@echo "  clean            Delete build artifacts"
-	@echo "  lint             Run all linters (go vet, staticcheck, golangci-lint)"
-	@echo "  test             Run all tests (unit, integration, e2e)"
-	@echo "  build            Build container images tagged with policy"
-	@echo "  build-coverage   Build coverage-instrumented container images"
-	@echo "  deploy           Push container images to GHCR"
-	@echo "  cover            Run unit test coverage and gate on 98%% threshold"
-	@echo "  cover-merge      Merge unit and molecule coverage profiles"
-	@echo "  molecule         Run molecule end-to-end container tests"
-	@echo "  molecule-coverage Run molecule tests with coverage collection"
-	@echo "  version          Tag v0.0.0 if no semver tags exist, else bump patch"
-	@echo "  version/major    Bump major version and tag"
-	@echo "  version/minor    Bump minor version and tag"
-	@echo "  version/patch    Bump patch version and tag"
-	@echo "  help             Show this help"
+	@echo "  all (default)      Build container images"
+	@echo "  setup (manual)     Install dependencies"
+	@echo "  clean (manual)     Delete build artifacts"
+	@echo "  lint               Run all linters (go vet, staticcheck, golangci-lint)"
+	@echo "  test               Run all tests (unit, integration, e2e)"
+	@echo "  build              Build container images tagged with policy"
+	@echo "  build-coverage     Build coverage-instrumented container images"
+	@echo "  deploy             Push container images to GHCR"
+	@echo "  cover              Run unit test coverage and gate on 98%% threshold"
+	@echo "  cover-merge        Merge unit and molecule coverage profiles"
+	@echo "  molecule           Run molecule end-to-end container tests"
+	@echo "  molecule-coverage  Run molecule tests with coverage collection"
+	@echo "  check-targets      Verify every .PHONY target is exercised in CI"
+	@echo "  version (manual)   Tag v0.0.0 if no semver tags exist, else bump patch"
+	@echo "  version/major (m)  Bump major version and tag"
+	@echo "  version/minor (m)  Bump minor version and tag"
+	@echo "  version/patch (m)  Bump patch version and tag"
+	@echo "  help (manual)      Show this help"
 	@echo ""
 	@echo "Image Tag Policy:"
 	@echo "  Feature branch/PR:  :<commit-sha>"

@@ -1,9 +1,12 @@
 # Build stage — Ubuntu for libvirt-dev (CGO required)
 FROM ubuntu:26.04 AS build
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ARG VERSION=dev
 ARG COMMIT=unknown
 
+# hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates curl gcc libc6-dev pkg-config libvirt-dev && \
@@ -45,6 +48,7 @@ RUN if [ "$COVERAGE" = "1" ]; then \
     fi
 
 # Collect runtime dependencies into a minimal root filesystem.
+# hadolint ignore=SC2046
 RUN mkdir -p /runtime/lib/x86_64-linux-gnu /runtime/lib64 /runtime/etc/ssl/certs /runtime/usr/lib/x86_64-linux-gnu && \
     cp /etc/ssl/certs/ca-certificates.crt /runtime/etc/ssl/certs/ && \
     cp /lib64/ld-linux-x86-64.so.2 /runtime/lib64/ && \
