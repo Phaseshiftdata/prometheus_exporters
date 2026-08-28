@@ -1,0 +1,66 @@
+name: Cleanup coverage images
+
+on:
+  schedule:
+    # Weekly on Sunday at 03:00 UTC
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+env:
+  # All exporter package names under the phaseshiftdata org.
+  PACKAGES: >-
+    cloudflare_exporter
+    github_exporter
+    network_exporter
+    ipsec_exporter
+    libvirt_exporter
+    relay_exporter
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete coverage images older than 7 days
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CUTOFF=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          echo "Deleting coverage images created before ${CUTOFF}..."
+
+          DELETED=0
+          for PKG in $PACKAGES; do
+            echo "--- Checking ${PKG} ---"
+
+            # Paginate through all versions of this package.
+            PAGE=1
+            while true; do
+              VERSIONS=$(gh api \
+                --paginate \
+                "/orgs/phaseshiftdata/packages/container/${PKG}/versions?per_page=100&page=${PAGE}" \
+                --jq '.[] | select(.metadata.container.tags | any(startswith("coverage-"))) | select(.created_at < "'"${CUTOFF}"'") | .id' \
+                2>/dev/null) || break
+
+              if [ -z "$VERSIONS" ]; then
+                break
+              fi
+
+              for VID in $VERSIONS; do
+                echo "  Deleting version ${VID} from ${PKG}..."
+                gh api \
+                  --method DELETE \
+                  "/orgs/phaseshiftdata/packages/container/${PKG}/versions/${VID}" \
+                  2>/dev/null && DELETED=$((DELETED + 1)) || echo "  Warning: failed to delete ${VID}"
+              done
+
+              PAGE=$((PAGE + 1))
+              # Safety: stop after 10 pages (1000 versions).
+              if [ "$PAGE" -gt 10 ]; then
+                break
+              fi
+            done
+          done
+
+          echo "Cleanup complete. Deleted ${DELETED} stale coverage image(s)."
