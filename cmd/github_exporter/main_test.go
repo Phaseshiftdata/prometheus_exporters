@@ -716,8 +716,9 @@ func TestRunWithRealDatabase(t *testing.T) {
 	// Long enough for Connect and RunMigrations to complete. The poller starts
 	// too and will fail against GitHub, but it runs in its own goroutine and
 	// only logs -- it must not bring run() down, which is part of what this
-	// test is asserting.
-	time.Sleep(500 * time.Millisecond)
+	// test is asserting. CI postgres can be slow to accept connections, so
+	// allow extra time.
+	time.Sleep(3 * time.Second)
 	cancel()
 
 	select {
