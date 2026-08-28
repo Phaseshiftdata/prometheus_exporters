@@ -138,6 +138,17 @@ func TestAllCollectors_InterfaceMethods(t *testing.T) {
 				return c
 			},
 		},
+		{
+			name:             "dns_records",
+			priority:         governor.PriorityBackground,
+			interval:         60 * time.Second,
+			requiredDatasets: 0,
+			newFunc: func() Collector {
+				ts := newTestSetup(t)
+				c, _ := NewDNSRecordsCollector(client, ts.store, ts.selfMetrics, ts.logger, 300, 60, 60, nil, zones, ts.registry)
+				return c
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -225,6 +236,11 @@ func TestNewCollector_RegistrationError(t *testing.T) {
 		{"zone_status", func(ts testSetup) error {
 			NewZoneStatusCollector(client, ts.store, ts.selfMetrics, ts.logger, 300, 60, 60, nil, zones, nil, ts.registry)
 			_, err := NewZoneStatusCollector(client, ts.store, ts.selfMetrics, ts.logger, 300, 60, 60, nil, zones, nil, ts.registry)
+			return err
+		}},
+		{"dns_records", func(ts testSetup) error {
+			NewDNSRecordsCollector(client, ts.store, ts.selfMetrics, ts.logger, 300, 60, 60, nil, zones, ts.registry)
+			_, err := NewDNSRecordsCollector(client, ts.store, ts.selfMetrics, ts.logger, 300, 60, 60, nil, zones, ts.registry)
 			return err
 		}},
 	}
