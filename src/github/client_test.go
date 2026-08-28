@@ -301,6 +301,77 @@ func TestClient_Get_BadJSON(t *testing.T) {
 	}
 }
 
+func TestClient_Get_ETagEviction(t *testing.T) {
+	// Pre-fill the ETag cache to maxETagEntries so the next successful GET
+	// triggers the eviction path (line 166-170 of client.go).
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"new-etag"`)
+		w.Header().Set("X-RateLimit-Remaining", "4999")
+		json.NewEncoder(w).Encode(map[string]string{"data": "ok"})
+	}))
+	defer server.Close()
+
+	client := NewClient(testAuth("test-token"))
+
+	// Fill the ETag cache to the limit.
+	client.etagMu.Lock()
+	for i := 0; i < maxETagEntries; i++ {
+		client.etags[fmt.Sprintf("url-%d", i)] = fmt.Sprintf("etag-%d", i)
+	}
+	client.etagMu.Unlock()
+
+	var result map[string]string
+	modified, err := client.Get(context.Background(), server.URL+"/test", &result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !modified {
+		t.Fatal("expected modified=true")
+	}
+
+	// After eviction, the cache should be much smaller (new map with capacity
+	// maxETagEntries/2, plus the one new entry).
+	client.etagMu.RLock()
+	size := len(client.etags)
+	client.etagMu.RUnlock()
+	if size >= maxETagEntries {
+		t.Fatalf("expected etag cache to be evicted, but size is %d", size)
+	}
+}
+
+func TestClient_RateLimitObserver(t *testing.T) {
+	// Test the rate limit observer callback (covers the SetRateLimitObserver
+	// callback path used by github_exporter run() line 232-234).
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := requestCount.Add(1)
+		if count == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer server.Close()
+
+	client := NewClient(testAuth("test-token"))
+	client.sleepFunc = func(d time.Duration) {} // don't actually sleep
+
+	var observedKind string
+	client.SetRateLimitObserver(func(kind string, _ time.Duration) {
+		observedKind = kind
+	})
+
+	var result map[string]string
+	_, err := client.Get(context.Background(), server.URL+"/test", &result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if observedKind == "" {
+		t.Fatal("expected rate limit observer to be called")
+	}
+}
+
 func TestClient_RateLimitSleep_NoResetHeader(t *testing.T) {
 	// 403 with X-RateLimit-Remaining=0 but no X-RateLimit-Reset header.
 	var requestCount atomic.Int32

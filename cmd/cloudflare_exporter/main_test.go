@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -908,6 +909,117 @@ func TestRootCmd_APITokenOpenBao_ConflictWithFlag(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil {
 		t.Fatal("expected error when both --cf.api-token and --cf.api-token-openbao are set")
+	}
+}
+
+func TestRun_WithMockServer_RediscoveryError(t *testing.T) {
+	// Test re-discovery failure path (lines 433-437 of main.go) by
+	// having the mock server return an error after the initial discovery.
+	callCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			switch r.URL.Path {
+			case "/client/v4/user/tokens/verify":
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": true,
+					"result":  map[string]string{"status": "active"},
+				})
+				return
+			case "/client/v4/accounts":
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": true,
+					"result": []map[string]string{
+						{"id": "acc1", "name": "Test Account"},
+					},
+				})
+				return
+			case "/client/v4/zones":
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": true,
+					"result":  []map[string]interface{}{},
+				})
+				return
+			}
+		}
+		if r.Method == http.MethodPost {
+			callCount++
+			if callCount > 3 {
+				// After initial discovery, return errors for re-discovery.
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": map[string]interface{}{
+					"__schema": map[string]interface{}{
+						"queryType": map[string]interface{}{
+							"fields": []map[string]string{{"name": "viewer"}},
+						},
+					},
+					"__type": map[string]interface{}{
+						"fields": []map[string]interface{}{
+							{
+								"name": "accounts",
+								"type": map[string]interface{}{
+									"fields": []map[string]interface{}{},
+								},
+							},
+						},
+					},
+					"viewer": map[string]interface{}{
+						"accounts": []map[string]interface{}{},
+						"zones":    []map[string]interface{}{},
+					},
+				},
+			})
+			return
+		}
+		w.WriteHeader(500)
+	}))
+	defer ts.Close()
+
+	client := createMockClient(ts)
+
+	rc := testRunConfig()
+	rc.CapabilitiesOnly = false
+	rc.ListenAddress = "127.0.0.1:19203"
+	rc.DiscoveryInterval = 100 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			resp, err := http.Get("http://127.0.0.1:19203/health")
+			if err == nil {
+				resp.Body.Close()
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		// Wait for re-discovery to fire and fail.
+		time.Sleep(300 * time.Millisecond)
+		cancel()
+	}()
+
+	err := run(ctx, rc, client)
+	if err != nil {
+		t.Fatalf("run should return nil on clean shutdown, got: %v", err)
+	}
+}
+
+func TestRun_ServerStartError(t *testing.T) {
+	// Test the server start error path (line 467-469 of main.go) by
+	// using an invalid listen address.
+	rc := testRunConfig()
+	rc.CapabilitiesOnly = false
+	rc.ListenAddress = "invalid-address-no-port"
+
+	err := run(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected server start error")
+	}
+	if !strings.Contains(err.Error(), "server error") {
+		t.Fatalf("expected server error, got: %v", err)
 	}
 }
 
