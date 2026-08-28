@@ -1,0 +1,96 @@
+# Coverage policy manifest
+# Classifies every path for coverage measurement.
+# CI fails when a new unclassified path appears.
+#
+# Categories:
+#   line_coverable     - measured by instrumentation (Go, TypeScript)
+#   obligation_covered - measured by assertion inventory (Dockerfiles, Makefile, SQL)
+#   exempt             - not measured, with documented justification
+
+line_coverable:
+  - path: "cmd/"
+    language: go
+    tool: "go test -coverprofile"
+    floor: 98
+  - path: "internal/"
+    language: go
+    tool: "go test -coverprofile"
+    floor: 98
+  - path: "src/"
+    language: go
+    tool: "go test -coverprofile"
+    floor: 98
+  - path: "site/src/"
+    language: typescript
+    tool: "vitest + playwright (istanbul)"
+    floor: 95
+
+obligation_covered:
+  - path: "cmd/*/Dockerfile"
+    method: "hadolint + molecule container tests"
+  - path: "Makefile"
+    method: "make check-targets (CI target inventory)"
+  - path: "src/github/db/migrations/"
+    method: "pgTAP schema shape tests + trigger behavior tests"
+
+exempt:
+  - path: ".github/"
+    reason: "Covered by execution in CI; no additional instrumentation needed"
+  - path: "site/e2e/"
+    reason: "Test code — tests the site, not tested itself"
+  - path: "site/scripts/"
+    reason: "Build tooling scripts — exercised during CI coverage merge"
+  - path: "site/index.html"
+    reason: "Static HTML entry point"
+  - path: "site/playwright.config.ts"
+    reason: "Test configuration"
+  - path: "site/playwright.coverage.config.ts"
+    reason: "Test configuration"
+  - path: "site/playwright.pdv.config.ts"
+    reason: "Test configuration"
+  - path: "site/public/"
+    reason: "Static assets"
+  - path: "site/tsconfig.json"
+    reason: "TypeScript configuration"
+  - path: "site/vite.config.ts"
+    reason: "Build configuration"
+  - path: "site/vitest.config.ts"
+    reason: "Test configuration"
+  - path: "site/package.json"
+    reason: "Dependency manifest"
+  - path: "site/package-lock.json"
+    reason: "Dependency lockfile"
+  - path: "site/src/style.css"
+    reason: "Stylesheet — no executable logic"
+  - path: "tests/"
+    reason: "Test code"
+  - path: "docs/"
+    reason: "Documentation — no executable code"
+  - path: "src/procnet/testdata/"
+    reason: "Test fixture data"
+  - path: ".coverage-policy.yml"
+    reason: "This file"
+  - path: ".gitignore"
+    reason: "Git configuration"
+  - path: ".leakdetector.yml"
+    reason: "Configuration file"
+  - path: "codecov.yml"
+    reason: "Configuration file"
+  - path: "go.mod"
+    reason: "Dependency manifest"
+  - path: "go.sum"
+    reason: "Dependency lockfile"
+  - path: "VERSION"
+    reason: "Version file"
+  - path: "README.md"
+    reason: "Documentation"
+  - path: "CONTRIBUTING.md"
+    reason: "Documentation"
+  - path: "CODE_OF_CONDUCT.md"
+    reason: "Documentation"
+  - path: "SECURITY.md"
+    reason: "Documentation"
+  - path: "LICENSE.txt"
+    reason: "License file"
+  - path: "CLAUDE.md"
+    reason: "AI assistant configuration"

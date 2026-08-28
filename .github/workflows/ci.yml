@@ -82,6 +82,8 @@ jobs:
         run: hadolint cmd/*/Dockerfile
       - name: Check Makefile target coverage
         run: make check-targets
+      - name: Check coverage policy classification
+        run: make check-coverage-policy
 
   # ──────────────────────────────────────────────────────────────────────
   # Test — unit, integration, coverage gate
