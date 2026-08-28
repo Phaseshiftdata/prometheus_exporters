@@ -7,14 +7,22 @@
     "dev": "vite --port 3000",
     "build": "vite build",
     "test:install": "npx playwright install --with-deps chromium",
-    "test": "npx playwright test"
+    "test": "npx playwright test",
+    "test:unit": "vitest run --coverage",
+    "test:e2e:coverage": "INSTRUMENT_COVERAGE=1 npx playwright test --config=playwright.coverage.config.ts",
+    "test:coverage": "npm run test:unit && npm run test:e2e:coverage && bash scripts/merge-coverage.sh"
   },
   "dependencies": {
     "@asymmetric-effort/specifyjs": "latest"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.0",
+    "@vitest/coverage-istanbul": "^4.1.11",
+    "jsdom": "^30.0.1",
+    "nyc": "^18.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
-    "@playwright/test": "^1.59.0"
+    "vite-plugin-istanbul": "^9.0.1",
+    "vitest": "^4.1.11"
   }
 }

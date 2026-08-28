@@ -208,12 +208,34 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install site dependencies
         run: cd site && npm install
+      - name: Run Vitest unit tests with coverage
+        run: cd site && npx vitest run --coverage
+      - name: Run instrumented Playwright e2e tests
+        run: |
+          cd site
+          npx playwright install --with-deps chromium
+          INSTRUMENT_COVERAGE=1 npx playwright test --config=playwright.coverage.config.ts
+      - name: Merge TypeScript coverage
+        run: cd site && bash scripts/merge-coverage.sh
+      - name: Check TypeScript coverage threshold
+        run: |
+          cd site
+          COVERAGE=$(npx nyc report --temp-dir coverage/e2e --reporter text-summary 2>/dev/null | grep Statements | awk '{print $3}' | sed 's/%//')
+          echo "TypeScript coverage: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < 95.0" | bc -l) )); then
+            echo "::error::TypeScript coverage ${COVERAGE}% is below 95% threshold"
+            exit 1
+          fi
+      - name: Upload TypeScript coverage artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: typescript-coverage
+          path: site/coverage/lcov.info
+          retention-days: 30
       - name: Build site with relative base for blue-green
         run: cd site && npx vite build --base='./'
       - name: Write version marker for deployment verification
         run: echo "${{ github.sha }}" > site/dist/version.txt
-      - name: Install Playwright
-        run: cd site && npx playwright install --with-deps chromium
       - name: Run pre-deployment e2e tests
         run: cd site && npx playwright test e2e/site.spec.ts
       - name: Upload site build artifact
