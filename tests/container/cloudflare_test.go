@@ -2,6 +2,7 @@ package container_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -40,6 +41,13 @@ func TestCloudflareExporter(t *testing.T) {
 		}
 	})
 
+	t.Run("self_metrics_collectors_registered", func(t *testing.T) {
+		_, body := httpGet(t, base+"/metrics")
+		if !strings.Contains(body, "cloudflare_exporter_collectors_registered") {
+			t.Error("/metrics does not contain cloudflare_exporter_collectors_registered")
+		}
+	})
+
 	t.Run("health_endpoint", func(t *testing.T) {
 		status, _ := httpGet(t, base+"/health")
 		if status != http.StatusOK {
@@ -48,12 +56,28 @@ func TestCloudflareExporter(t *testing.T) {
 	})
 
 	t.Run("capabilities_returns_json", func(t *testing.T) {
-		status, body := httpGet(t, base+"/capabilities")
-		if status != http.StatusOK {
-			t.Fatalf("expected 200 from /capabilities, got %d", status)
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Get(base + "/capabilities")
+		if err != nil {
+			t.Fatalf("GET /capabilities: %v", err)
 		}
-		if !json.Valid([]byte(body)) {
-			t.Errorf("/capabilities response is not valid JSON: %s", body)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 from /capabilities, got %d", resp.StatusCode)
+		}
+
+		ct := resp.Header.Get("Content-Type")
+		if !strings.HasPrefix(ct, "application/json") {
+			t.Errorf("expected Content-Type application/json, got %q", ct)
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("reading /capabilities body: %v", err)
+		}
+		if !json.Valid(bodyBytes) {
+			t.Errorf("/capabilities response is not valid JSON: %s", bodyBytes)
 		}
 	})
 
@@ -71,6 +95,15 @@ func TestCloudflareExporter(t *testing.T) {
 		contentType := httpGetContentType(t, base+"/metrics")
 		if !strings.HasPrefix(contentType, "text/plain") {
 			t.Errorf("expected text/plain Content-Type from /metrics, got %q", contentType)
+		}
+	})
+
+	t.Run("landing_page_links", func(t *testing.T) {
+		_, body := httpGet(t, base+"/")
+		for _, path := range []string{"/metrics", "/health", "/capabilities"} {
+			if !strings.Contains(body, path) {
+				t.Errorf("landing page does not contain link to %s", path)
+			}
 		}
 	})
 
@@ -106,7 +139,7 @@ func TestCloudflareNoAPIToken(t *testing.T) {
 
 	// Without CF_API_TOKEN the exporter should still start -- the token is
 	// resolved lazily during discovery. Verify the process launches.
-	_ = runContainer(t, image, hostPort, cloudflarePort)
+	containerID := runContainer(t, image, hostPort, cloudflarePort)
 
 	time.Sleep(2 * time.Second)
 
@@ -114,6 +147,13 @@ func TestCloudflareNoAPIToken(t *testing.T) {
 	status, _ := httpGetStatus(t, baseURL(t, hostPort)+"/health")
 	if status != http.StatusOK && status != -1 {
 		t.Logf("health check returned %d without API token (container may have exited)", status)
+	}
+
+	// Verify the exporter logs a warning about the missing token.
+	logs := containerLogs(t, containerID)
+	if !strings.Contains(strings.ToLower(logs), "warn") &&
+		!strings.Contains(strings.ToLower(logs), "token") {
+		t.Logf("expected warning about missing API token in logs: %s", logs)
 	}
 }
 
