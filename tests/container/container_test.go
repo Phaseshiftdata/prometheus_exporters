@@ -316,6 +316,35 @@ func testHelpFlag(t *testing.T, image string, dockerArgs ...string) {
 	}
 }
 
+// testInvalidFlag verifies that running the container with an unknown flag
+// causes a non-zero exit code.
+func testInvalidFlag(t *testing.T, image string, dockerArgs ...string) {
+	t.Helper()
+
+	args := append(dockerArgs, image, "--bogus-flag")
+	_, err := runContainerForeground(t, image, args...)
+	if err == nil {
+		t.Error("expected non-zero exit for --bogus-flag, but container succeeded")
+	}
+}
+
+// httpGetContentType performs an HTTP GET and returns the Content-Type header.
+func httpGetContentType(t *testing.T, url string) string {
+	t.Helper()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		t.Fatalf("HTTP GET %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200 from %s, got %d", url, resp.StatusCode)
+	}
+	return resp.Header.Get("Content-Type")
+}
+
 // testNoShell verifies that /bin/sh does not exist in the image (distroless).
 func testNoShell(t *testing.T, image string) {
 	t.Helper()

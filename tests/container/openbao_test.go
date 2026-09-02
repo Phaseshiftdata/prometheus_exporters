@@ -34,6 +34,12 @@ func TestOpenBaoExporterUser(t *testing.T) {
 	testUser(t, image, "65532")
 }
 
+func TestOpenBaoExporterInvalidFlag(t *testing.T) {
+	skipIfNoDocker(t)
+	image := buildImage(t, openbaoDockerfile, openbaoImageTag)
+	testInvalidFlag(t, image)
+}
+
 func TestOpenBaoExporterNoOpenbaoAddr(t *testing.T) {
 	skipIfNoDocker(t)
 	image := buildImage(t, openbaoDockerfile, openbaoImageTag)
