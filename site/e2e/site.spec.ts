@@ -26,6 +26,9 @@ test.describe("site deployment verification", () => {
     await page.click('a[href="#/libvirt-exporter"]');
     await expect(page.locator(".main")).toContainText("Libvirt Exporter");
 
+    await page.click('a[href="#/openbao-exporter"]');
+    await expect(page.locator(".main")).toContainText("OpenBao Exporter");
+
     await page.click('a[href="#/relay-exporter"]');
     await expect(page.locator(".main")).toContainText("Relay Exporter");
   });

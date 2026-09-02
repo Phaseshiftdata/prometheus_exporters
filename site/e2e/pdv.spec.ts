@@ -478,6 +478,80 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator("body")).toContainText("9177");
   });
 
+  // OpenBao exporter page coverage
+  test("openbao exporter page renders with content", async ({ page }) => {
+    await page.goto("./#/openbao-exporter");
+    await expect(page.locator(".main")).toContainText("OpenBao Exporter");
+    await expect(page.locator(".main")).toContainText("ghcr.io/phaseshiftdata/openbao_exporter");
+    await expect(page.locator("pre code").first()).toBeVisible();
+  });
+
+  test("openbao exporter page has configuration flags", async ({ page }) => {
+    await page.goto("./#/openbao-exporter");
+    await expect(page.locator(".main")).toContainText("--listen-address");
+    await expect(page.locator(".main")).toContainText("--openbao-addr");
+    await expect(page.locator(".main")).toContainText("--openbao-token");
+    await expect(page.locator(".main")).toContainText("--openbao-token-file");
+    await expect(page.locator(".main")).toContainText("--log-level");
+    await expect(page.locator(".main")).toContainText("--poll-interval");
+  });
+
+  test("openbao exporter page has health metrics", async ({ page }) => {
+    await page.goto("./#/openbao-exporter");
+    await expect(page.locator(".main")).toContainText("openbao_up");
+    await expect(page.locator(".main")).toContainText("openbao_initialized");
+    await expect(page.locator(".main")).toContainText("openbao_sealed");
+    await expect(page.locator(".main")).toContainText("openbao_standby");
+    await expect(page.locator(".main")).toContainText("openbao_leader");
+  });
+
+  test("openbao exporter page has cluster metrics", async ({ page }) => {
+    await page.goto("./#/openbao-exporter");
+    await expect(page.locator(".main")).toContainText("openbao_raft_committed_index");
+    await expect(page.locator(".main")).toContainText("openbao_peers");
+  });
+
+  test("openbao exporter page has architecture section", async ({ page }) => {
+    await page.goto("./#/openbao-exporter");
+    await expect(page.locator(".main")).toContainText("Architecture");
+    await expect(page.locator(".main")).toContainText("Collection Flow");
+  });
+
+  test("openbao exporter page has cluster discovery section", async ({ page }) => {
+    await page.goto("./#/openbao-exporter");
+    await expect(page.locator(".main")).toContainText("Cluster Discovery");
+    await expect(page.locator(".main")).toContainText("/v1/sys/storage/raft/configuration");
+  });
+
+  test("openbao exporter page has deployment section", async ({ page }) => {
+    await page.goto("./#/openbao-exporter");
+    await expect(page.locator(".main")).toContainText("Kubernetes");
+    await expect(page.locator(".main")).toContainText("Docker Compose");
+  });
+
+  test("openbao exporter page has failure modes section", async ({ page }) => {
+    await page.goto("./#/openbao-exporter");
+    await expect(page.locator(".main")).toContainText("Failure Modes");
+    await expect(page.locator(".main")).toContainText("Seed node unreachable");
+  });
+
+  test("openbao exporter page has security section", async ({ page }) => {
+    await page.goto("./#/openbao-exporter");
+    await expect(page.locator(".main")).toContainText("Security");
+    await expect(page.locator(".main")).toContainText("Distroless container");
+  });
+
+  test("navigation to openbao exporter page works", async ({ page }) => {
+    await page.goto("./");
+    await page.click('a[href="#/openbao-exporter"]');
+    await expect(page.locator(".main")).toContainText("OpenBao Exporter");
+  });
+
+  test("home page lists openbao_exporter", async ({ page }) => {
+    await page.goto("./");
+    await expect(page.locator("body")).toContainText("openbao_exporter");
+  });
+
   // Relay exporter page coverage
   test("relay exporter page renders with content", async ({ page }) => {
     await page.goto("./#/relay-exporter");

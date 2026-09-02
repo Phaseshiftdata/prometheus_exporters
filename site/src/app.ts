@@ -4,6 +4,7 @@ import { IpsecExporterPage } from "./pages/ipsec-exporter.js";
 import { CloudflareExporterPage } from "./pages/cloudflare-exporter.js";
 import { GitHubExporterPage } from "./pages/github-exporter.js";
 import { LibvirtExporterPage } from "./pages/libvirt-exporter.js";
+import { OpenBaoExporterPage } from "./pages/openbao-exporter.js";
 import { RelayExporterPage } from "./pages/relay-exporter.js";
 
 declare const __APP_VERSION__: string;
@@ -18,6 +19,7 @@ ROUTES["/ipsec-exporter"] = IpsecExporterPage;
 ROUTES["/cloudflare-exporter"] = CloudflareExporterPage;
 ROUTES["/github-exporter"] = GitHubExporterPage;
 ROUTES["/libvirt-exporter"] = LibvirtExporterPage;
+ROUTES["/openbao-exporter"] = OpenBaoExporterPage;
 ROUTES["/relay-exporter"] = RelayExporterPage;
 
 export function getPath(): string {
@@ -33,6 +35,7 @@ export function renderNav(currentPath: string): string {
     { to: "/cloudflare-exporter", label: "Cloudflare" },
     { to: "/github-exporter", label: "GitHub" },
     { to: "/libvirt-exporter", label: "Libvirt" },
+    { to: "/openbao-exporter", label: "OpenBao" },
     { to: "/relay-exporter", label: "Relay" },
   ];
 
@@ -88,6 +91,7 @@ export function updateHead(path: string): void {
   titles["/cloudflare-exporter"] = "Cloudflare Exporter \u2014 Prometheus Exporters";
   titles["/github-exporter"] = "GitHub Exporter \u2014 Prometheus Exporters";
   titles["/libvirt-exporter"] = "Libvirt Exporter \u2014 Prometheus Exporters";
+  titles["/openbao-exporter"] = "OpenBao Exporter \u2014 Prometheus Exporters";
   titles["/relay-exporter"] = "Relay Exporter \u2014 Prometheus Exporters";
 
   document.title = path in titles ? titles[path] : titles["/"];
