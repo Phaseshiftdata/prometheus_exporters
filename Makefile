@@ -284,7 +284,7 @@ MANUAL_TARGETS := setup clean version version/major version/minor version/patch 
 # commands rather than through make. "all" is the default target aliasing
 # "build"; the rest are run directly in CI (e.g., "go vet" covers "lint",
 # "go test -coverprofile" covers "test" and "cover").
-CI_EQUIVALENT_TARGETS := all lint test cover molecule build-coverage molecule-coverage cover-merge deploy-coverage check-coverage-policy
+CI_EQUIVALENT_TARGETS := all lint test cover build deploy molecule build-coverage molecule-coverage cover-merge deploy-coverage check-coverage-policy
 
 check-targets:
 	@echo "Checking Makefile target coverage in CI..."
