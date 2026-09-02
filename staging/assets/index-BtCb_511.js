@@ -1532,7 +1532,7 @@ spec:
         <li>Cross-compilation requires a C cross-compiler and the target platform's <code>libvirt-dev</code> headers.</li>
         <li>The build stage in the Dockerfile installs <code>libvirt-dev</code> before running <code>go build</code>.</li>
       </ul>
-    </div>`}function o(){let e=[[`--listen-address`,`127.0.0.1:9100`,`Address and port the HTTP server listens on.`],[`--openbao-addr`,`<em>(required)</em>`,`OpenBao API address (e.g., <code>https://openbao:8200</code>).`],[`--openbao-token`,`<em>(optional)</em>`,`Authentication token for OpenBao API.`],[`--openbao-token-file`,`<em>(optional)</em>`,`Path to file containing authentication token.`],[`--log-level`,`info`,`Log verbosity. One of <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>.`],[`--poll-interval`,`30s`,`How often to re-discover cluster members.`]].map(([e,t,n])=>`<tr><td><code>${e}</code></td><td><code>${t}</code></td><td>${n}</td></tr>`).join(``),t=[[`openbao_up`,`gauge`,`<em>(none)</em>`,`1 if the seed node is reachable.`],[`openbao_initialized`,`gauge`,`<em>(none)</em>`,`1 if the cluster is initialized.`],[`openbao_sealed`,`gauge`,`node`,`1 if the node is sealed.`],[`openbao_standby`,`gauge`,`node`,`1 if the node is in standby mode.`],[`openbao_leader`,`gauge`,`node`,`1 on the leader node.`],[`openbao_node_info`,`gauge`,`node, version`,`Information about an OpenBao node.`]],n=[[`openbao_raft_committed_index`,`gauge`,`<em>(none)</em>`,`Raft committed index.`],[`openbao_raft_applied_index`,`gauge`,`<em>(none)</em>`,`Raft applied index.`],[`openbao_peers`,`gauge`,`<em>(none)</em>`,`Number of raft peers.`]],r=e=>`<table><thead><tr><th>Metric</th><th>Type</th><th>Labels</th><th>Description</th></tr></thead><tbody>${e.map(([e,t,n,r])=>`<tr><td><code>${e}</code></td><td>${t}</td><td><code>${n}</code></td><td>${r}</td></tr>`).join(``)}</tbody></table>`,i=[[`200`,`Active (initialized, unsealed, leader)`],[`429`,`Standby`],[`472`,`DR secondary standby`],[`501`,`Uninitialized`],[`503`,`Sealed`]].map(([e,t])=>`<tr><td><code>${e}</code></td><td>${t}</td></tr>`).join(``);return`
+    </div>`}function o(){let e=[[`--listen-address`,`127.0.0.1:9100`,`Address and port the HTTP server listens on.`],[`--openbao-addr`,`<em>(required)</em>`,`OpenBao API address (e.g., <code>https://openbao:8200</code>).`],[`--openbao-token-file`,`<em>(optional)</em>`,`Path to file containing authentication token. Enables cluster discovery. File must have permissions 0600 or stricter.`],[`--log-level`,`info`,`Log verbosity. One of <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>.`],[`--poll-interval`,`30s`,`How often to re-discover cluster members.`]].map(([e,t,n])=>`<tr><td><code>${e}</code></td><td><code>${t}</code></td><td>${n}</td></tr>`).join(``),t=[[`openbao_up`,`gauge`,`<em>(none)</em>`,`1 if the seed node is reachable.`],[`openbao_initialized`,`gauge`,`<em>(none)</em>`,`1 if the cluster is initialized.`],[`openbao_sealed`,`gauge`,`node`,`1 if the node is sealed.`],[`openbao_standby`,`gauge`,`node`,`1 if the node is in standby mode.`],[`openbao_leader`,`gauge`,`node`,`1 on the leader node.`],[`openbao_node_info`,`gauge`,`node, version`,`Information about an OpenBao node.`]],n=[[`openbao_raft_committed_index`,`gauge`,`<em>(none)</em>`,`Raft committed index.`],[`openbao_raft_applied_index`,`gauge`,`<em>(none)</em>`,`Raft applied index.`],[`openbao_peers`,`gauge`,`<em>(none)</em>`,`Number of raft peers.`]],r=e=>`<table><thead><tr><th>Metric</th><th>Type</th><th>Labels</th><th>Description</th></tr></thead><tbody>${e.map(([e,t,n,r])=>`<tr><td><code>${e}</code></td><td>${t}</td><td><code>${n}</code></td><td>${r}</td></tr>`).join(``)}</tbody></table>`,i=[[`200`,`Active (initialized, unsealed, leader)`],[`429`,`Standby`],[`472`,`DR secondary standby`],[`501`,`Uninitialized`],[`503`,`Sealed`]].map(([e,t])=>`<tr><td><code>${e}</code></td><td>${t}</td></tr>`).join(``);return`
     <div class="section">
       <h2>OpenBao Exporter</h2>
       <p>
@@ -1584,11 +1584,16 @@ docker run -d --rm \\
 
     <div class="section">
       <h2>Configuration</h2>
-      <p>All configuration is via CLI flags. No configuration file or environment variables are required.</p>
+      <p>All configuration is via CLI flags.</p>
       <table>
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>${e}</tbody>
       </table>
+      <h3>Environment Variables</h3>
+      <p><code>OPENBAO_TOKEN</code> &mdash; Fallback authentication token when
+      <code>--openbao-token-file</code> is not set. The file-based method is
+      preferred. The token is never accepted as a CLI flag to avoid
+      <code>/proc/cmdline</code> exposure.</p>
     </div>
 
     <div class="section">
