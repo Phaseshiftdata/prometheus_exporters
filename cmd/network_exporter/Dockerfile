@@ -8,7 +8,7 @@ ARG COMMIT=unknown
 
 # hadolint ignore=DL3008
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl libcap2-bin && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
 ARG GO_VERSION=1.26.6
@@ -45,12 +45,6 @@ RUN if [ "$COVERAGE" = "1" ]; then \
             -o /network_exporter \
             ./cmd/network_exporter/; \
     fi
-
-# Set file capabilities so the binary can use NET_ADMIN and DAC_READ_SEARCH
-# as a non-root user. The permitted set must be a subset of the container's
-# bounding set, so only these two capabilities are granted.
-# hadolint ignore=DL3059
-RUN setcap cap_net_admin,cap_dac_read_search=+eip /network_exporter
 
 # Runtime stage
 FROM gcr.io/distroless/static-debian12:nonroot

@@ -8,7 +8,7 @@ ARG COMMIT=unknown
 
 # hadolint ignore=DL3008
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl libcap2-bin && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
 ARG GO_VERSION=1.26.6
@@ -45,12 +45,6 @@ RUN if [ "$COVERAGE" = "1" ]; then \
             -o /ipsec_exporter \
             ./cmd/ipsec_exporter/; \
     fi
-
-# Set file capabilities so the binary can use NET_ADMIN and DAC_READ_SEARCH
-# as a non-root user. Same reasoning as network_exporter — the bounding set
-# from --cap-add is not inherited by a non-root process without file caps.
-# hadolint ignore=DL3059
-RUN setcap cap_net_admin,cap_dac_read_search=+eip /ipsec_exporter
 
 # Runtime stage
 FROM gcr.io/distroless/static-debian12:nonroot
