@@ -70,7 +70,11 @@ docker run -d --rm \
 The container requires access to several host resources. It must run as
 root (`--user 0:0`) because reading procfs entries of other processes and
 querying nftables counters require root privileges. The default
-distroless UID 65532 is not sufficient.
+distroless UID 65532 is not sufficient. The container image does not use
+file capabilities (`setcap`), so it is compatible with hardened Docker
+environments that enable `userns-remap` and `no-new-privileges`.
+Capabilities are provided at runtime via `cap_add` and take effect
+because the process runs as root.
 
 | Resource | Mount / Flag | Purpose |
 | --- | --- | --- |

@@ -90,7 +90,11 @@ docker run -d --rm \
 
 The exporter needs access to the host's kernel state. It must run as
 root (`--user 0:0`) because reading procfs entries of other processes and
-querying nftables counters require root privileges.
+querying nftables counters require root privileges. The container image
+does not use file capabilities (`setcap`), so it is compatible with
+hardened Docker environments that enable `userns-remap` and
+`no-new-privileges`. Capabilities are provided at runtime via `cap_add`
+and take effect because the process runs as root.
 
 | Requirement | Reason |
 | --- | --- |
