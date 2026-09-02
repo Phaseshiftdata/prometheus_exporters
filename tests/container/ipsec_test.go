@@ -61,6 +61,13 @@ func TestIpsecExporter(t *testing.T) {
 		}
 	})
 
+	t.Run("metrics_content_type", func(t *testing.T) {
+		contentType := httpGetContentType(t, baseURL+"/metrics")
+		if !strings.HasPrefix(contentType, "text/plain") {
+			t.Errorf("expected text/plain Content-Type from /metrics, got %q", contentType)
+		}
+	})
+
 	t.Run("clean_shutdown", func(t *testing.T) {
 		testCleanShutdown(t, containerID)
 	})
@@ -88,4 +95,10 @@ func TestIpsecExporterUser(t *testing.T) {
 	skipIfNoDocker(t)
 	image := buildImage(t, ipsecDockerfile, ipsecImageTag)
 	testUser(t, image, "65532")
+}
+
+func TestIpsecExporterInvalidFlag(t *testing.T) {
+	skipIfNoDocker(t)
+	image := buildImage(t, ipsecDockerfile, ipsecImageTag)
+	testInvalidFlag(t, image, "--cap-add=NET_ADMIN", "--cap-add=DAC_READ_SEARCH")
 }

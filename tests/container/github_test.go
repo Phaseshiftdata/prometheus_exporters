@@ -44,3 +44,9 @@ func TestGithubExporterUser(t *testing.T) {
 	image := buildImage(t, githubDockerfile, githubImageTag)
 	testUser(t, image, "65532")
 }
+
+func TestGithubExporterInvalidFlag(t *testing.T) {
+	skipIfNoDocker(t)
+	image := buildImage(t, githubDockerfile, githubImageTag)
+	testInvalidFlag(t, image)
+}

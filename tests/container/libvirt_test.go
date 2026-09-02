@@ -51,6 +51,13 @@ func TestLibvirtExporter(t *testing.T) {
 		}
 	})
 
+	t.Run("metrics_content_type", func(t *testing.T) {
+		contentType := httpGetContentType(t, baseURL+"/metrics")
+		if !strings.HasPrefix(contentType, "text/plain") {
+			t.Errorf("expected text/plain Content-Type from /metrics, got %q", contentType)
+		}
+	})
+
 	t.Run("binary_starts_successfully", func(t *testing.T) {
 		// Verify the container is actually running (binary linked correctly
 		// against libvirt shared libs in the scratch+libs image).
@@ -89,4 +96,10 @@ func TestLibvirtExporterUser(t *testing.T) {
 	skipIfNoDocker(t)
 	image := buildImage(t, libvirtDockerfile, libvirtImageTag)
 	testUser(t, image, "65532")
+}
+
+func TestLibvirtExporterInvalidFlag(t *testing.T) {
+	skipIfNoDocker(t)
+	image := buildImage(t, libvirtDockerfile, libvirtImageTag)
+	testInvalidFlag(t, image)
 }

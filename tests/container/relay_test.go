@@ -53,6 +53,15 @@ func TestRelayExporter(t *testing.T) {
 		}
 	})
 
+	t.Run("metrics_content_type", func(t *testing.T) {
+		// The relay requires ip and port params for /metrics. With valid
+		// params it returns text/plain even when the target is unreachable.
+		contentType := httpGetContentType(t, base+"/metrics?ip=10.0.0.1&port=9100")
+		if !strings.HasPrefix(contentType, "text/plain") {
+			t.Errorf("expected text/plain Content-Type from /metrics, got %q", contentType)
+		}
+	})
+
 	t.Run("metrics_proxy_rfc1918_unreachable", func(t *testing.T) {
 		// Target 10.0.0.1:9100 is unreachable, but the relay should still
 		// return 200 with relay_target_response=0.
@@ -132,4 +141,10 @@ func TestRelayExporterUser(t *testing.T) {
 	skipIfNoDocker(t)
 	image := buildImage(t, relayDockerfile, relayImageTag)
 	testUser(t, image, "65532")
+}
+
+func TestRelayExporterInvalidFlag(t *testing.T) {
+	skipIfNoDocker(t)
+	image := buildImage(t, relayDockerfile, relayImageTag)
+	testInvalidFlag(t, image)
 }

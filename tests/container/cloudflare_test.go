@@ -67,6 +67,13 @@ func TestCloudflareExporter(t *testing.T) {
 		}
 	})
 
+	t.Run("metrics_content_type", func(t *testing.T) {
+		contentType := httpGetContentType(t, base+"/metrics")
+		if !strings.HasPrefix(contentType, "text/plain") {
+			t.Errorf("expected text/plain Content-Type from /metrics, got %q", contentType)
+		}
+	})
+
 	t.Run("clean_shutdown", func(t *testing.T) {
 		testCleanShutdown(t, containerID)
 	})
@@ -132,4 +139,10 @@ func TestCloudflareUser(t *testing.T) {
 	skipIfNoDocker(t)
 	image := buildImage(t, cloudflareDockerfile, cloudflareImageTag)
 	testUser(t, image, "65532")
+}
+
+func TestCloudflareInvalidFlag(t *testing.T) {
+	skipIfNoDocker(t)
+	image := buildImage(t, cloudflareDockerfile, cloudflareImageTag)
+	testInvalidFlag(t, image)
 }
