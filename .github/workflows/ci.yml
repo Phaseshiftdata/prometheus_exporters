@@ -150,7 +150,7 @@ jobs:
           path: coverage.out
 
   # ──────────────────────────────────────────────────────────────────────
-  # Build — container images with tagging policy
+  # Build — container images in parallel using matrix strategy
   # ──────────────────────────────────────────────────────────────────────
   build:
     needs: test
@@ -158,6 +158,17 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        exporter:
+          - cloudflare_exporter
+          - github_exporter
+          - network_exporter
+          - ipsec_exporter
+          - libvirt_exporter
+          - relay_exporter
+          - openbao_exporter
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -166,6 +177,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Install C dependencies (libvirt for CGO)
+        if: matrix.exporter == 'libvirt_exporter'
         run: |
           sudo apt-get update -qq
           for i in 1 2 3; do
@@ -189,35 +201,38 @@ jobs:
           else
             echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           fi
-      - name: Build container images
-        run: make build
-        env:
-          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
-      - name: Verify container image
+      - name: Build ${{ matrix.exporter }}
         run: |
-          IMAGE="${{ env.REGISTRY }}/cloudflare_exporter:${{ steps.tag.outputs.tag }}"
-          if docker image inspect "$IMAGE" >/dev/null 2>&1; then
-            echo "Verifying image security posture..."
-            # Verify non-root user
-            USER=$(docker inspect --format='{{.Config.User}}' "$IMAGE")
-            echo "Container user: $USER"
-            # Verify no shell
-            if docker run --rm --entrypoint /bin/sh "$IMAGE" -c "echo shell" 2>/dev/null; then
-              echo "::error::Runtime image contains a shell (violates FR-8)"
-              exit 1
-            fi
-            echo "No shell found in runtime image (FR-8 verified)"
-            # Verify binary is statically linked
-            docker run --rm --entrypoint /cloudflare_exporter "$IMAGE" --help 2>&1 || true
-            echo "Container image verification passed"
+          docker build \
+            -t ${{ env.REGISTRY }}/${{ matrix.exporter }}:${{ steps.tag.outputs.tag }} \
+            -f cmd/${{ matrix.exporter }}/Dockerfile \
+            --build-arg VERSION=$(cat VERSION) \
+            --build-arg COMMIT=$(git rev-parse --short HEAD) \
+            .
+      - name: Verify ${{ matrix.exporter }} container image
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ matrix.exporter }}:${{ steps.tag.outputs.tag }}"
+          echo "Verifying image security posture for ${{ matrix.exporter }}..."
+          # Verify non-root user
+          USER=$(docker inspect --format='{{.Config.User}}' "$IMAGE")
+          echo "Container user: $USER"
+          # Verify no shell
+          if docker run --rm --entrypoint /bin/sh "$IMAGE" -c "echo shell" 2>/dev/null; then
+            echo "::error::Runtime image contains a shell (violates FR-8)"
+            exit 1
           fi
-      - name: Run molecule container tests
-        run: go test -v -timeout 300s ./tests/container/...
-      - name: Push container images
+          echo "No shell found in runtime image (FR-8 verified)"
+      - name: Run molecule tests for ${{ matrix.exporter }}
+        run: |
+          # Convert exporter name to test pattern
+          # e.g., cloudflare_exporter -> Cloudflare, openbao_exporter -> Openbao
+          BASENAME=$(echo "${{ matrix.exporter }}" | sed 's/_exporter//')
+          PATTERN=$(echo "$BASENAME" | sed 's/\b\(.\)/\u\1/g')
+          echo "Running tests matching: Test.*${PATTERN}.*"
+          go test -v -timeout 120s -run "Test.*${PATTERN}.*" ./tests/container/...
+      - name: Push ${{ matrix.exporter }}
         if: github.event_name == 'push'
-        run: make deploy
-        env:
-          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
+        run: docker push ${{ env.REGISTRY }}/${{ matrix.exporter }}:${{ steps.tag.outputs.tag }}
 
   # ──────────────────────────────────────────────────────────────────────
   # Coverage images — build and push coverage-instrumented images to GHCR
@@ -229,14 +244,23 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        exporter:
+          - cloudflare_exporter
+          - github_exporter
+          - network_exporter
+          - ipsec_exporter
+          - libvirt_exporter
+          - relay_exporter
+          - openbao_exporter
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
       - name: Install C dependencies (libvirt for CGO)
+        if: matrix.exporter == 'libvirt_exporter'
         run: |
           sudo apt-get update -qq
           for i in 1 2 3; do
@@ -255,14 +279,21 @@ jobs:
         run: |
           SHORT_SHA="$(git rev-parse --short HEAD)"
           echo "tag=coverage-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-      - name: Build coverage-instrumented images
-        run: make build-coverage
-        env:
-          IMAGE_TAG: ${{ steps.covtag.outputs.tag }}
-      - name: Push coverage images
-        run: make deploy-coverage
-        env:
-          IMAGE_TAG: ${{ steps.covtag.outputs.tag }}
+      - name: Build coverage-instrumented ${{ matrix.exporter }}
+        run: |
+          docker build \
+            -t ${{ env.REGISTRY }}/${{ matrix.exporter }}:coverage \
+            -f cmd/${{ matrix.exporter }}/Dockerfile \
+            --build-arg VERSION=$(cat VERSION) \
+            --build-arg COMMIT=$(git rev-parse --short HEAD) \
+            --build-arg COVERAGE=1 \
+            .
+      - name: Push coverage ${{ matrix.exporter }}
+        run: |
+          docker tag \
+            ${{ env.REGISTRY }}/${{ matrix.exporter }}:coverage \
+            ${{ env.REGISTRY }}/${{ matrix.exporter }}:${{ steps.covtag.outputs.tag }}
+          docker push ${{ env.REGISTRY }}/${{ matrix.exporter }}:${{ steps.covtag.outputs.tag }}
 
   # ──────────────────────────────────────────────────────────────────────
   # Site build — compile site and run pre-deployment e2e tests
