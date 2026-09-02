@@ -25,6 +25,7 @@ import (
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector"
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/openbao"
 	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
+	"github.com/phaseshiftdata/prometheus_exporters/src/secrets"
 	"github.com/phaseshiftdata/prometheus_exporters/src/version"
 )
 
@@ -34,12 +35,11 @@ func main() {
 
 func rootCmd() *cobra.Command {
 	var (
-		listenAddr    string
-		openbaoAddr   string
-		openbaoToken  string
-		tokenFile     string
-		logLevel      string
-		pollInterval  time.Duration
+		listenAddr   string
+		openbaoAddr  string
+		tokenFile    string
+		logLevel     string
+		pollInterval time.Duration
 	)
 
 	cmd := &cobra.Command{
@@ -60,7 +60,6 @@ func rootCmd() *cobra.Command {
 			return run(cmd.Context(), config{
 				listenAddr:   listenAddr,
 				openbaoAddr:  openbaoAddr,
-				openbaoToken: openbaoToken,
 				tokenFile:    tokenFile,
 				logLevel:     logLevel,
 				pollInterval: pollInterval,
@@ -70,8 +69,7 @@ func rootCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&listenAddr, "listen-address", "127.0.0.1:9100", "Address to listen on for metrics")
 	cmd.Flags().StringVar(&openbaoAddr, "openbao-addr", "", "OpenBao API address (required, e.g., https://openbao:8200)")
-	cmd.Flags().StringVar(&openbaoToken, "openbao-token", "", "OpenBao authentication token (optional)")
-	cmd.Flags().StringVar(&tokenFile, "openbao-token-file", "", "Path to file containing OpenBao token (optional)")
+	cmd.Flags().StringVar(&tokenFile, "openbao-token-file", "", "Path to file containing OpenBao token (optional, enables cluster discovery)")
 	cmd.Flags().StringVar(&logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	cmd.Flags().DurationVar(&pollInterval, "poll-interval", 30*time.Second, "How often to re-discover cluster members")
 
@@ -81,7 +79,6 @@ func rootCmd() *cobra.Command {
 type config struct {
 	listenAddr   string
 	openbaoAddr  string
-	openbaoToken string
 	tokenFile    string
 	logLevel     string
 	pollInterval time.Duration
@@ -90,17 +87,23 @@ type config struct {
 func run(ctx context.Context, cfg config, regOverride ...*prometheus.Registry) error {
 	exporter.SetupLogging(cfg.logLevel)
 
-	// Resolve token: explicit flag takes precedence over file.
-	token := cfg.openbaoToken
-	if token == "" && cfg.tokenFile != "" {
-		data, err := os.ReadFile(cfg.tokenFile)
+	// Resolve token: file takes precedence over env var. The token is
+	// never accepted as a CLI flag to avoid /proc/cmdline exposure.
+	// ReadSecretFile validates symlinks and file permissions (must be
+	// 0600 or stricter).
+	var token string
+	if cfg.tokenFile != "" {
+		var err error
+		token, err = secrets.ReadSecretFile(cfg.tokenFile)
 		if err != nil {
-			return fmt.Errorf("reading token file: %w", err)
+			return fmt.Errorf("--openbao-token-file: %w", err)
 		}
-		token = strings.TrimSpace(string(data))
+	} else if envToken := os.Getenv("OPENBAO_TOKEN"); envToken != "" {
+		token = envToken
 	}
 
 	client := openbao.NewClient(cfg.openbaoAddr, token)
+	defer client.ZeroToken()
 
 	coll := openbao.New(client, cfg.pollInterval)
 
@@ -140,13 +143,19 @@ func serve(ctx context.Context, listenAddr, exporterName string, reg *prometheus
 		w.WriteHeader(http.StatusOK)
 		w.Write(rec.body)
 
-		// Append native OpenBao metrics.
+		// Append native OpenBao metrics after validating they are
+		// well-formed Prometheus exposition format. This prevents a
+		// compromised OpenBao instance from injecting arbitrary metrics.
 		native := coll.NativeMetrics()
 		if native != "" {
-			if len(rec.body) > 0 && rec.body[len(rec.body)-1] != '\n' {
-				w.Write([]byte("\n"))
+			if err := exporter.ValidatePrometheusText(native); err != nil {
+				slog.Warn("native OpenBao metrics failed validation; skipping", "error", err)
+			} else {
+				if len(rec.body) > 0 && rec.body[len(rec.body)-1] != '\n' {
+					w.Write([]byte("\n"))
+				}
+				w.Write([]byte(native))
 			}
-			w.Write([]byte(native))
 		}
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

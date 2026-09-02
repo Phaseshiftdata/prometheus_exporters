@@ -9,7 +9,13 @@ import (
 	"time"
 )
 
-const maxResponseBytes = 100 * 1024 * 1024 // 100 MiB
+const (
+	// maxAPIResponseBytes caps health and raft configuration responses.
+	maxAPIResponseBytes = 1 << 20 // 1 MiB
+	// maxMetricsResponseBytes caps the native metrics response which can
+	// be larger due to high-cardinality Prometheus exposition text.
+	maxMetricsResponseBytes = 10 << 20 // 10 MiB
+)
 
 // HealthResponse represents the JSON response from /v1/sys/health.
 type HealthResponse struct {
@@ -109,7 +115,7 @@ func (c *Client) Health(addr string) (*HealthResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("reading health response: %w", err)
 	}
@@ -142,7 +148,7 @@ func (c *Client) Metrics() (string, error) {
 		return "", fmt.Errorf("metrics request returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxMetricsResponseBytes))
 	if err != nil {
 		return "", fmt.Errorf("reading metrics response: %w", err)
 	}
@@ -176,7 +182,7 @@ func (c *Client) RaftConfiguration() (*RaftConfig, error) {
 		return nil, fmt.Errorf("raft config request returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("reading raft config response: %w", err)
 	}

@@ -11,7 +11,6 @@ describe("OpenBaoExporterPage", () => {
     const html = OpenBaoExporterPage();
     expect(html).toContain("--listen-address");
     expect(html).toContain("--openbao-addr");
-    expect(html).toContain("--openbao-token");
     expect(html).toContain("--openbao-token-file");
     expect(html).toContain("--log-level");
     expect(html).toContain("--poll-interval");

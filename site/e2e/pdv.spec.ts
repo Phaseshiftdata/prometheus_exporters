@@ -490,7 +490,6 @@ test.describe("post-deployment verification", () => {
     await page.goto("./#/openbao-exporter");
     await expect(page.locator(".main")).toContainText("--listen-address");
     await expect(page.locator(".main")).toContainText("--openbao-addr");
-    await expect(page.locator(".main")).toContainText("--openbao-token");
     await expect(page.locator(".main")).toContainText("--openbao-token-file");
     await expect(page.locator(".main")).toContainText("--log-level");
     await expect(page.locator(".main")).toContainText("--poll-interval");

@@ -333,9 +333,13 @@ func writeRelayResponse(w http.ResponseWriter, targetBody string, targetSuccess 
 	w.WriteHeader(http.StatusOK)
 
 	if targetBody != "" {
-		fmt.Fprint(w, targetBody)
-		if !strings.HasSuffix(targetBody, "\n") {
-			fmt.Fprint(w, "\n")
+		if err := exporter.ValidatePrometheusText(targetBody); err != nil {
+			slog.Warn("target response failed Prometheus format validation; omitting target metrics", "error", err)
+		} else {
+			fmt.Fprint(w, targetBody)
+			if !strings.HasSuffix(targetBody, "\n") {
+				fmt.Fprint(w, "\n")
+			}
 		}
 	}
 

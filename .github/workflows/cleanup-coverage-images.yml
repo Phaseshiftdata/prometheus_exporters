@@ -18,6 +18,7 @@ env:
     ipsec_exporter
     libvirt_exporter
     relay_exporter
+    openbao_exporter
 
 jobs:
   cleanup:

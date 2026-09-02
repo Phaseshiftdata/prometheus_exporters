@@ -176,7 +176,7 @@ func TestRunWithBadTokenFile(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for nonexistent token file")
 	}
-	if !strings.Contains(err.Error(), "reading token file") {
+	if !strings.Contains(err.Error(), "--openbao-token-file") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -215,7 +215,6 @@ func TestRunWithExplicitToken(t *testing.T) {
 		errCh <- run(ctx, config{
 			listenAddr:   "127.0.0.1:0",
 			openbaoAddr:  srv.URL,
-			openbaoToken: "explicit-token",
 			logLevel:     "error",
 			pollInterval: 0,
 		})
@@ -272,12 +271,11 @@ func TestRunTokenPrecedence(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 
-	// Explicit token takes precedence over file.
+	// Token read from file.
 	go func() {
 		errCh <- run(ctx, config{
 			listenAddr:   "127.0.0.1:0",
 			openbaoAddr:  srv.URL,
-			openbaoToken: "explicit-token",
 			tokenFile:    tokenPath,
 			logLevel:     "error",
 			pollInterval: 0,
