@@ -4,7 +4,7 @@ PROJECT_NAME := prometheus_exporters
 VERSION_FILE := VERSION
 VERSION := $(shell cat $(VERSION_FILE))
 
-EXPORTERS := cloudflare_exporter github_exporter network_exporter ipsec_exporter libvirt_exporter relay_exporter
+EXPORTERS := cloudflare_exporter github_exporter network_exporter ipsec_exporter libvirt_exporter openbao_exporter relay_exporter
 REGISTRY := ghcr.io/phaseshiftdata
 
 COMMIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")

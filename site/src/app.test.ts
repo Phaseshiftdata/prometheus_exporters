@@ -46,8 +46,8 @@ describe("ROUTES", () => {
     expect(Object.keys(ROUTES)).toContain("/relay-exporter");
   });
 
-  it("has exactly 7 routes", () => {
-    expect(Object.keys(ROUTES).length).toBe(7);
+  it("has exactly 8 routes", () => {
+    expect(Object.keys(ROUTES).length).toBe(8);
   });
 
   it("all route components return non-empty HTML strings", () => {
