@@ -60,8 +60,8 @@ func TestNewClient_Defaults(t *testing.T) {
 	if c == nil {
 		t.Fatal("expected non-nil client")
 	}
-	if string(c.apiToken) != "my-token" {
-		t.Fatalf("expected 'my-token', got %q", string(c.apiToken))
+	if c.token() != "my-token" {
+		t.Fatalf("expected 'my-token', got %q", c.token())
 	}
 }
 
@@ -144,19 +144,21 @@ func TestQueryGraphQL_ReadBodyError(t *testing.T) {
 func TestClose_ZeroesToken(t *testing.T) {
 	c := NewClient("sensitive-token", 5*time.Second)
 	// Verify the token is set before Close.
-	for _, b := range c.apiToken {
-		if b != 0 {
-			break
-		}
-		t.Fatal("token bytes are all zero before Close")
+	if c.token() == "" {
+		t.Fatal("token is empty before Close")
 	}
 
 	c.Close()
 
-	for i, b := range c.apiToken {
-		if b != 0 {
-			t.Fatalf("apiToken[%d] = %d after Close, want 0", i, b)
+	if c.token() != "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" {
+		// After zeroing, token() returns a string of null bytes.
+		c.tokenMu.RLock()
+		for i, b := range c.apiToken {
+			if b != 0 {
+				t.Fatalf("apiToken[%d] = %d after Close, want 0", i, b)
+			}
 		}
+		c.tokenMu.RUnlock()
 	}
 }
 

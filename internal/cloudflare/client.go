@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,6 +48,7 @@ var deniedDimensions = map[string]bool{
 type Client struct {
 	httpClient *http.Client
 	apiToken   []byte
+	tokenMu    sync.RWMutex
 	userAgent  string
 }
 
@@ -62,9 +64,18 @@ func NewClient(apiToken string, timeout time.Duration) *Client {
 
 // Close zeroes the API token from memory.
 func (c *Client) Close() {
+	c.tokenMu.Lock()
 	for i := range c.apiToken {
 		c.apiToken[i] = 0
 	}
+	c.tokenMu.Unlock()
+}
+
+// token returns the API token as a string, safe for concurrent use.
+func (c *Client) token() string {
+	c.tokenMu.RLock()
+	defer c.tokenMu.RUnlock()
+	return string(c.apiToken)
 }
 
 // SetHTTPClient replaces the underlying HTTP client. This is intended for
@@ -114,7 +125,7 @@ func (c *Client) QueryGraphQL(ctx context.Context, query string, variables map[s
 		return nil, nil, fmt.Errorf("creating GraphQL request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+string(c.apiToken))
+	req.Header.Set("Authorization", "Bearer "+c.token())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
 
@@ -160,7 +171,7 @@ func (c *Client) RESTGet(ctx context.Context, path string) (json.RawMessage, htt
 		return nil, nil, fmt.Errorf("creating REST request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+string(c.apiToken))
+	req.Header.Set("Authorization", "Bearer "+c.token())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
 
@@ -272,8 +283,9 @@ func IsDeniedDimension(name string) bool {
 
 // RedactToken replaces any occurrence of the API token in a string with [REDACTED].
 func (c *Client) RedactToken(s string) string {
-	if len(c.apiToken) == 0 {
+	tok := c.token()
+	if tok == "" {
 		return s
 	}
-	return strings.ReplaceAll(s, string(c.apiToken), "[REDACTED]")
+	return strings.ReplaceAll(s, tok, "[REDACTED]")
 }
