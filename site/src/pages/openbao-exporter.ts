@@ -2,8 +2,7 @@ export function OpenBaoExporterPage(): string {
   const configRows = [
     ["--listen-address", "127.0.0.1:9100", "Address and port the HTTP server listens on."],
     ["--openbao-addr", "<em>(required)</em>", "OpenBao API address (e.g., <code>https://openbao:8200</code>)."],
-    ["--openbao-token", "<em>(optional)</em>", "Authentication token for OpenBao API."],
-    ["--openbao-token-file", "<em>(optional)</em>", "Path to file containing authentication token."],
+    ["--openbao-token-file", "<em>(optional)</em>", "Path to file containing authentication token. Enables cluster discovery. File must have permissions 0600 or stricter."],
     ["--log-level", "info", "Log verbosity. One of <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>."],
     ["--poll-interval", "30s", "How often to re-discover cluster members."],
   ];
@@ -98,11 +97,16 @@ docker run -d --rm \\
 
     <div class="section">
       <h2>Configuration</h2>
-      <p>All configuration is via CLI flags. No configuration file or environment variables are required.</p>
+      <p>All configuration is via CLI flags.</p>
       <table>
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>${configTable}</tbody>
       </table>
+      <h3>Environment Variables</h3>
+      <p><code>OPENBAO_TOKEN</code> &mdash; Fallback authentication token when
+      <code>--openbao-token-file</code> is not set. The file-based method is
+      preferred. The token is never accepted as a CLI flag to avoid
+      <code>/proc/cmdline</code> exposure.</p>
     </div>
 
     <div class="section">

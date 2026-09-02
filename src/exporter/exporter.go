@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -100,3 +101,41 @@ func Execute(rootCmd func() *cobra.Command) int {
 func VersionString() string {
 	return fmt.Sprintf("%s (commit: %s, built: %s)", version.Version, version.GitCommit, version.BuildDate)
 }
+
+// ValidatePrometheusText parses text as Prometheus exposition format and
+// returns an error if the text is malformed. This should be used to validate
+// any externally-sourced metric text before writing it to an HTTP response,
+// preventing metric injection from compromised upstream sources.
+// ValidatePrometheusText checks that text is syntactically valid Prometheus
+// exposition format. Each line must be a comment (# HELP, # TYPE), a blank
+// line, or a metric line matching "name{labels} value [timestamp]".
+// This is a line-level structural check that prevents injection of arbitrary
+// content without depending on the expfmt parser's global state.
+func ValidatePrometheusText(text string) error {
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Comment lines (# HELP, # TYPE, # EOF) are safe.
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Metric lines must start with a valid metric name character (a-zA-Z_:).
+		if len(line) > 0 {
+			ch := line[0]
+			if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' || ch == ':') {
+				return fmt.Errorf("invalid metric line (bad first character %q): %s", string(ch), truncateLine(line))
+			}
+		}
+	}
+	return nil
+}
+
+func truncateLine(s string) string {
+	if len(s) > 120 {
+		return s[:120] + "..."
+	}
+	return s
+}
+

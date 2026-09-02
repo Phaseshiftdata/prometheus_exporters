@@ -68,10 +68,15 @@ variables are required.
 | --- | --- | --- |
 | `--listen-address` | `127.0.0.1:9100` | Address and port the HTTP server listens on. |
 | `--openbao-addr` | *(required)* | OpenBao API address (e.g., `https://openbao:8200`). |
-| `--openbao-token` | *(optional)* | Authentication token for OpenBao API. |
-| `--openbao-token-file` | *(optional)* | Path to file containing authentication token. |
+| `--openbao-token-file` | *(optional)* | Path to file containing authentication token. Enables cluster discovery. File must have permissions 0600 or stricter. |
 | `--log-level` | `info` | Log verbosity. One of `debug`, `info`, `warn`, `error`. |
 | `--poll-interval` | `30s` | How often to re-discover cluster members. |
+
+### Environment Variables
+
+| Variable | Description |
+| --- | --- |
+| `OPENBAO_TOKEN` | Fallback authentication token when `--openbao-token-file` is not set. The file-based method is preferred. The token is never accepted as a CLI flag to avoid `/proc/cmdline` exposure. |
 
 ## Metrics
 
@@ -121,7 +126,7 @@ body regardless of status code.
 The exporter discovers cluster members via
 `/v1/sys/storage/raft/configuration`. This endpoint:
 
-- Requires authentication (an `--openbao-token` or `--openbao-token-file`).
+- Requires authentication (`--openbao-token-file`).
 - May not be available on all deployments (e.g., non-raft storage backends).
 - Returns 403 if the token lacks permission, or 404 if raft is not in use.
 
