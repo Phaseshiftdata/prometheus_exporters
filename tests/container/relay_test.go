@@ -90,6 +90,74 @@ func TestRelayExporter(t *testing.T) {
 		}
 	})
 
+	t.Run("metrics_missing_ip_param", func(t *testing.T) {
+		// Providing port but no ip should return 400.
+		status, _ := httpGetStatus(t, base+"/metrics?port=9100")
+		if status != http.StatusBadRequest {
+			t.Errorf("expected 400 for /metrics?port=9100 (missing ip), got %d", status)
+		}
+	})
+
+	t.Run("metrics_invalid_port_param", func(t *testing.T) {
+		// Non-numeric port should return 400.
+		status, _ := httpGetStatus(t, base+"/metrics?ip=10.0.0.1&port=abc")
+		if status != http.StatusBadRequest {
+			t.Errorf("expected 400 for port=abc, got %d", status)
+		}
+	})
+
+	t.Run("metrics_reject_public_ip", func(t *testing.T) {
+		// Public IP 8.8.8.8 must be rejected as non-RFC 1918.
+		status, _ := httpGetStatus(t, base+"/metrics?ip=8.8.8.8&port=9100")
+		if status != http.StatusBadRequest {
+			t.Errorf("expected 400 for public IP 8.8.8.8, got %d", status)
+		}
+	})
+
+	t.Run("host_endpoint_exists", func(t *testing.T) {
+		// /host endpoint should exist and return relay metrics even when
+		// the target is unreachable.
+		status, body := httpGet(t, base+"/host?ip=10.0.0.1&port=9100")
+		if status != http.StatusOK {
+			t.Fatalf("expected 200 from /host?ip=10.0.0.1&port=9100, got %d", status)
+		}
+		if !strings.Contains(body, "relay_response 1") {
+			t.Errorf("expected relay_response 1 in /host response:\n%s", body)
+		}
+	})
+
+	t.Run("cadvisor_endpoint_exists", func(t *testing.T) {
+		// /cadvisor endpoint should exist and return relay metrics even
+		// when the target is unreachable.
+		status, body := httpGet(t, base+"/cadvisor?ip=10.0.0.1&port=9100")
+		if status != http.StatusOK {
+			t.Fatalf("expected 200 from /cadvisor?ip=10.0.0.1&port=9100, got %d", status)
+		}
+		if !strings.Contains(body, "relay_response 1") {
+			t.Errorf("expected relay_response 1 in /cadvisor response:\n%s", body)
+		}
+	})
+
+	t.Run("source_ip_filtering", func(t *testing.T) {
+		// Start a second container with a different --allowed-source so
+		// that requests from the Docker host are rejected.
+		hostPort2 := freePort(t)
+		runContainer(t, image, hostPort2, relayPort,
+			"--allowed-source=192.0.2.1",
+			"--listen-address=0.0.0.0:"+relayPort,
+			"--proxy-timeout=3s",
+		)
+		base2 := baseURL(t, hostPort2)
+		waitForHealthy(t, base2+"/health", 30*time.Second)
+
+		// Our request comes from the Docker gateway IP, which does not
+		// match 192.0.2.1, so we expect 403 Forbidden.
+		status, _ := httpGetStatus(t, base2+"/metrics?ip=10.0.0.1&port=9100")
+		if status != http.StatusForbidden {
+			t.Errorf("expected 403 from unauthorized source IP, got %d", status)
+		}
+	})
+
 	t.Run("clean_shutdown", func(t *testing.T) {
 		testCleanShutdown(t, containerID)
 	})
