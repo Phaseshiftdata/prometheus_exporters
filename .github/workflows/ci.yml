@@ -322,16 +322,19 @@ jobs:
       - name: Check TypeScript coverage threshold
         run: |
           cd site
-          COVERAGE=$(npx vitest run --coverage 2>/dev/null | grep 'Statements' | tail -1 | awk '{print $3}' | sed 's/%//')
+          OUTPUT=$(npx vitest run --coverage 2>&1)
+          echo "$OUTPUT" | tail -20
+          COVERAGE=$(echo "$OUTPUT" | sed 's/\x1b\[[0-9;]*m//g' | grep "All files" | awk -F'|' '{gsub(/ /, "", $2); print $2}')
           if [ -z "$COVERAGE" ]; then
-            echo "::warning::Could not determine TypeScript coverage; skipping threshold check"
-            exit 0
+            echo "::error::Could not determine TypeScript coverage"
+            exit 1
           fi
-          echo "TypeScript coverage: ${COVERAGE}%"
+          echo "TypeScript statement coverage: ${COVERAGE}%"
           if (( $(echo "$COVERAGE < 95.0" | bc -l) )); then
             echo "::error::TypeScript coverage ${COVERAGE}% is below 95% threshold"
             exit 1
           fi
+          echo "TypeScript coverage ${COVERAGE}% meets 95% threshold"
       - name: Upload TypeScript coverage artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
