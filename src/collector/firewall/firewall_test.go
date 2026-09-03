@@ -374,7 +374,7 @@ func TestCollectorUpOnSuccess(t *testing.T) {
 func TestNewWhenNetlinkIsUnreachableIsPermanentlyDown(t *testing.T) {
 	origFn := probeReaderFn
 	defer func() { probeReaderFn = origFn }()
-	probeReaderFn = func() (NftablesReader, string) {
+	probeReaderFn = func(_ string) (NftablesReader, string) {
 		return nil, "no CAP_NET_ADMIN for NETLINK_NETFILTER in this network namespace: operation not permitted"
 	}
 
@@ -399,7 +399,7 @@ func TestNewWhenNetlinkIsUnreachableIsPermanentlyDown(t *testing.T) {
 func TestNewWithReachableNetlinkUsesTheProbedReader(t *testing.T) {
 	origFn := probeReaderFn
 	defer func() { probeReaderFn = origFn }()
-	probeReaderFn = func() (NftablesReader, string) {
+	probeReaderFn = func(_ string) (NftablesReader, string) {
 		return &mockReader{
 			policies: []ChainPolicy{
 				{Family: "ip", Table: "filter", Chain: "input", Policy: "drop"},

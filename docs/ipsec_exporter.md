@@ -105,6 +105,7 @@ variables are required.
 | `--max-graph-edges` | `10000` | Maximum number of network graph edges to export per scrape. Prevents metric cardinality explosion under high connection volume. When exceeded, output is truncated and `network_graph_edges_truncated` is set to 1. |
 | `--max-tcp-connections` | `10000` | Maximum number of per-connection TCP state metrics to export per scrape. Prevents metric cardinality explosion on busy hosts. When exceeded, output is truncated and `network_tcp_connections_truncated` is set to 1. |
 | `--tcp-connection-states` | *(all states)* | Comma-separated list of TCP states to report (e.g. `ESTABLISHED,LISTEN,TIME_WAIT`). When empty, all states are reported. |
+| `--host-netns` | *(empty)* | Path to the host network namespace file (e.g. `/host/proc/1/ns/net`). When set, the firewall collector opens a netlink socket in the specified namespace instead of the container's own, allowing it to read the host's nftables ruleset from a non-host-network container. See the [network_exporter documentation](network_exporter.md) for a userns-remap deployment example. |
 
 ## Collectors
 
