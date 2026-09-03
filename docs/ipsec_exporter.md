@@ -15,7 +15,7 @@ no static configuration of tunnel names or peer addresses is required.
 
 ## Architecture
 
-The exporter registers six collectors into a single Prometheus registry:
+The exporter registers seven collectors into a single Prometheus registry:
 
 | Collector | Source | Metrics Prefix |
 | --- | --- | --- |
@@ -23,10 +23,11 @@ The exporter registers six collectors into a single Prometheus registry:
 | Interface | sysfs | `network_interface_*`, `network_bond_*`, `network_bridge_*` |
 | Network Graph | procfs (`/proc/net/tcp`, `/proc/net/udp`) | `network_graph_*` |
 | Conntrack | procfs + netlink conntrack | `network_port_*`, `network_conntrack_*` |
+| TCP State | procfs (`/proc/net/tcp`, `/proc/net/tcp6`) | `network_tcp_*` |
 | Firewall | netlink nf_tables | `network_firewall_*` |
 | IPsec | strongSwan VICI socket | `ipsec_*` |
 
-The first five collectors are identical to those in `network_exporter`.
+The first six collectors are identical to those in `network_exporter`.
 The IPsec collector communicates with the strongSwan charon daemon over the
 VICI (Versatile IKE Configuration Interface) Unix socket, issuing
 `list-sas` and `stats` commands on each scrape.
@@ -102,6 +103,8 @@ variables are required.
 | `--log-level` | `info` | Log verbosity. One of `debug`, `info`, `warn`, `error`. |
 | `--max-arp-entries` | `10000` | Maximum number of ARP entries to export per scrape. Prevents metric cardinality explosion under ARP flooding. When exceeded, output is truncated and `network_arp_entries_truncated` is set to 1. |
 | `--max-graph-edges` | `10000` | Maximum number of network graph edges to export per scrape. Prevents metric cardinality explosion under high connection volume. When exceeded, output is truncated and `network_graph_edges_truncated` is set to 1. |
+| `--max-tcp-connections` | `10000` | Maximum number of per-connection TCP state metrics to export per scrape. Prevents metric cardinality explosion on busy hosts. When exceeded, output is truncated and `network_tcp_connections_truncated` is set to 1. |
+| `--tcp-connection-states` | *(all states)* | Comma-separated list of TCP states to report (e.g. `ESTABLISHED,LISTEN,TIME_WAIT`). When empty, all states are reported. |
 
 ## Collectors
 
@@ -219,6 +222,15 @@ For full details, see the
 
 Reports per-port connection counts by state, per-port byte counters from
 the kernel conntrack table, and listening port presence.
+
+For full details, see the
+[network_exporter documentation](network_exporter.md).
+
+### TCP State
+
+Reports per-TCP-connection state with full endpoint labels (local and
+peer address and port). Connections where both endpoints are loopback
+addresses are excluded. Cardinality is capped via `--max-tcp-connections`.
 
 For full details, see the
 [network_exporter documentation](network_exporter.md).

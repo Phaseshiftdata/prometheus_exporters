@@ -10,6 +10,7 @@ import (
 
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/arp"
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/netgraph"
+	"github.com/phaseshiftdata/prometheus_exporters/src/collector/tcpstate"
 	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
 )
 
@@ -51,9 +52,9 @@ func TestSetupLogging(t *testing.T) {
 }
 
 func TestCreateAllCollectors(t *testing.T) {
-	collectors := createAllCollectors("/proc", "/sys", "/nonexistent/vici.sock", arp.DefaultMaxEntries, netgraph.DefaultMaxEdges)
-	if len(collectors) != 6 {
-		t.Errorf("expected 6 collectors, got %d", len(collectors))
+	collectors := createAllCollectors("/proc", "/sys", "/nonexistent/vici.sock", arp.DefaultMaxEntries, netgraph.DefaultMaxEdges, tcpstate.DefaultMaxConnections, "")
+	if len(collectors) != 7 {
+		t.Errorf("expected 7 collectors, got %d", len(collectors))
 	}
 }
 
@@ -85,7 +86,7 @@ func TestServeInvalidAddress(t *testing.T) {
 func TestRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
-	go func() { errCh <- run(ctx, "127.0.0.1:0", "/proc", "/sys", "/nonexistent/vici.sock", "info", arp.DefaultMaxEntries, netgraph.DefaultMaxEdges, nil) }()
+	go func() { errCh <- run(ctx, "127.0.0.1:0", "/proc", "/sys", "/nonexistent/vici.sock", "info", arp.DefaultMaxEntries, netgraph.DefaultMaxEdges, tcpstate.DefaultMaxConnections, "", nil) }()
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 
@@ -107,7 +108,7 @@ func TestRunRegistrationError(t *testing.T) {
 	}, []string{"ip", "mac", "device", "state"})
 	reg.MustRegister(conflicting)
 
-	err := run(context.Background(), "127.0.0.1:0", "/proc", "/sys", "/nonexistent/vici.sock", "info", arp.DefaultMaxEntries, netgraph.DefaultMaxEdges, reg)
+	err := run(context.Background(), "127.0.0.1:0", "/proc", "/sys", "/nonexistent/vici.sock", "info", arp.DefaultMaxEntries, netgraph.DefaultMaxEdges, tcpstate.DefaultMaxConnections, "", reg)
 	if err == nil {
 		t.Error("expected registration error")
 	}

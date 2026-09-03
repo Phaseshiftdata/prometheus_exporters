@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
@@ -21,6 +22,7 @@ import (
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/iface"
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/ipsec"
 	"github.com/phaseshiftdata/prometheus_exporters/src/collector/netgraph"
+	"github.com/phaseshiftdata/prometheus_exporters/src/collector/tcpstate"
 	"github.com/phaseshiftdata/prometheus_exporters/src/exporter"
 )
 
@@ -36,13 +38,15 @@ func rootCmd() *cobra.Command {
 	var logLevel string
 	var maxArpEntries int
 	var maxGraphEdges int
+	var maxTCPConns int
+	var tcpConnStates string
 
 	cmd := &cobra.Command{
 		Use:     "ipsec_exporter",
 		Short:   "Prometheus exporter for host network and IPsec metrics",
 		Version: exporter.VersionString(),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), listenAddr, procPath, sysPath, viciSocket, logLevel, maxArpEntries, maxGraphEdges, nil)
+			return run(cmd.Context(), listenAddr, procPath, sysPath, viciSocket, logLevel, maxArpEntries, maxGraphEdges, maxTCPConns, tcpConnStates, nil)
 		},
 	}
 
@@ -53,18 +57,20 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	cmd.Flags().IntVar(&maxArpEntries, "max-arp-entries", arp.DefaultMaxEntries, "Maximum ARP entries to export (prevents cardinality explosion)")
 	cmd.Flags().IntVar(&maxGraphEdges, "max-graph-edges", netgraph.DefaultMaxEdges, "Maximum network graph edges to export (prevents cardinality explosion)")
+	cmd.Flags().IntVar(&maxTCPConns, "max-tcp-connections", tcpstate.DefaultMaxConnections, "Maximum TCP connections to export (prevents cardinality explosion)")
+	cmd.Flags().StringVar(&tcpConnStates, "tcp-connection-states", "", "Comma-separated list of TCP states to report (default: all states)")
 
 	return cmd
 }
 
-func run(ctx context.Context, listenAddr, procPath, sysPath, viciSocket, logLevel string, maxArpEntries, maxGraphEdges int, reg *prometheus.Registry) error {
+func run(ctx context.Context, listenAddr, procPath, sysPath, viciSocket, logLevel string, maxArpEntries, maxGraphEdges, maxTCPConns int, tcpConnStates string, reg *prometheus.Registry) error {
 	exporter.SetupLogging(logLevel)
 
 	if reg == nil {
 		reg = prometheus.NewRegistry()
 	}
 
-	for _, c := range createAllCollectors(procPath, sysPath, viciSocket, maxArpEntries, maxGraphEdges) {
+	for _, c := range createAllCollectors(procPath, sysPath, viciSocket, maxArpEntries, maxGraphEdges, maxTCPConns, tcpConnStates) {
 		if err := reg.Register(c); err != nil {
 			return fmt.Errorf("registering collector %s: %w", c.Name(), err)
 		}
@@ -74,7 +80,16 @@ func run(ctx context.Context, listenAddr, procPath, sysPath, viciSocket, logLeve
 	return exporter.Serve(ctx, listenAddr, "IPsec Exporter", reg)
 }
 
-func createAllCollectors(procPath, sysPath, viciSocket string, maxArpEntries, maxGraphEdges int) []collector.Collector {
+func createAllCollectors(procPath, sysPath, viciSocket string, maxArpEntries, maxGraphEdges, maxTCPConns int, tcpConnStates string) []collector.Collector {
+	var states []string
+	if tcpConnStates != "" {
+		for _, s := range strings.Split(tcpConnStates, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				states = append(states, s)
+			}
+		}
+	}
 	return []collector.Collector{
 		arp.NewWithMax(maxArpEntries),
 		iface.New(sysPath),
@@ -82,5 +97,6 @@ func createAllCollectors(procPath, sysPath, viciSocket string, maxArpEntries, ma
 		conntrack.New(procPath),
 		firewall.New(),
 		ipsec.New(viciSocket),
+		tcpstate.NewWithMax(procPath, maxTCPConns, states),
 	}
 }

@@ -29,6 +29,7 @@ every scrape reflects the current state of the host.
 | **iface** | `src/collector/iface` | sysfs (`/sys/class/net/`) | Interface type classification, bond membership, bridge membership. |
 | **netgraph** | `src/collector/netgraph` | procfs (`/proc/net/tcp`, `/proc/net/udp`) | Deduplicated network topology edges between local listening ports and remote hosts. |
 | **conntrack** | `src/collector/conntrack` | procfs (`/proc/net/tcp`, `/proc/net/udp`) + Netlink (`NETLINK_NETFILTER`, conntrack subsystem) | Per-port connection counts by state, listening port presence, and per-port byte counters from conntrack. |
+| **tcpstate** | `src/collector/tcpstate` | procfs (`/proc/net/tcp`, `/proc/net/tcp6`) | Per-TCP-connection state with full endpoint labels. |
 | **firewall** | `src/collector/firewall` | Netlink (`NETLINK_NETFILTER`, nf_tables subsystem) | Packet and byte counters for nftables DROP/REJECT rules and chain default DROP policies. |
 
 ### Collector Interface
@@ -120,6 +121,8 @@ variables are required.
 | `--log-level` | `info` | Log verbosity. One of `debug`, `info`, `warn`, `error`. |
 | `--max-arp-entries` | `10000` | Maximum number of ARP entries to export per scrape. Prevents metric cardinality explosion under ARP flooding. When exceeded, output is truncated and `network_arp_entries_truncated` is set to 1. |
 | `--max-graph-edges` | `10000` | Maximum number of network graph edges to export per scrape. Prevents metric cardinality explosion under high connection volume. When exceeded, output is truncated and `network_graph_edges_truncated` is set to 1. |
+| `--max-tcp-connections` | `10000` | Maximum number of per-connection TCP state metrics to export per scrape. Prevents metric cardinality explosion on busy hosts. When exceeded, output is truncated and `network_tcp_connections_truncated` is set to 1. |
+| `--tcp-connection-states` | *(all states)* | Comma-separated list of TCP states to report (e.g. `ESTABLISHED,LISTEN,TIME_WAIT`). When empty, all states are reported. |
 
 ## Collectors
 
@@ -243,6 +246,54 @@ Only flows whose destination port matches a listening port are included.
 When conntrack accounting is unavailable (kernel module not loaded, or no
 `CAP_NET_ADMIN`), `network_conntrack_accounting_enabled` reads `0` and
 byte counter metrics are omitted.
+
+### TCP State
+
+The TCP state collector reports per-TCP-connection state as individual
+metrics, labeled with full endpoint information (local and peer address
+and port).
+
+**Data source:** procfs at `<proc-path>/net/tcp`, `<proc-path>/net/tcp6`.
+
+| Metric | Type | Labels | Description |
+| --- | --- | --- | --- |
+| `network_tcp_connection` | gauge | `local_addr`, `local_port`, `peer_addr`, `peer_port`, `state` | Per-TCP-connection state indicator; value is always 1. |
+| `network_tcp_connections_truncated` | gauge | *(none)* | Set to 1 when the connection count exceeds `--max-tcp-connections` and output is truncated; 0 otherwise. |
+
+**Label values:**
+
+- `local_addr` -- Local IP address (e.g. `192.168.1.10`).
+- `local_port` -- Local port number (e.g. `443`).
+- `peer_addr` -- Remote peer IP address (e.g. `10.0.0.5`).
+- `peer_port` -- Remote peer port number (e.g. `52431`).
+- `state` -- TCP connection state.
+
+**TCP states:**
+
+| Value | State |
+| --- | --- |
+| 01 | ESTABLISHED |
+| 02 | SYN_SENT |
+| 03 | SYN_RECV |
+| 04 | FIN_WAIT1 |
+| 05 | FIN_WAIT2 |
+| 06 | TIME_WAIT |
+| 07 | CLOSE |
+| 08 | CLOSE_WAIT |
+| 09 | LAST_ACK |
+| 0A | LISTEN |
+| 0B | CLOSING |
+
+**Loopback filtering:** Connections where both local and remote addresses
+are loopback (`127.0.0.1`, `0.0.0.0`, `::1`, `::`) are excluded.
+
+**State filtering:** The `--tcp-connection-states` flag limits which TCP
+states are reported. For example, `--tcp-connection-states=ESTABLISHED,LISTEN`
+reports only established and listening connections.
+
+**Cardinality cap:** The `--max-tcp-connections` flag limits the number of
+connections reported per scrape. When exceeded, `network_tcp_connections_truncated`
+is set to 1.
 
 ### Firewall
 
