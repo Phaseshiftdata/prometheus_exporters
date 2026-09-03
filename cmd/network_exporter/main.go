@@ -39,13 +39,14 @@ func rootCmd() *cobra.Command {
 	var maxGraphEdges int
 	var maxTCPConns int
 	var tcpConnStates string
+	var hostNetNS string
 
 	cmd := &cobra.Command{
 		Use:     "network_exporter",
 		Short:   "Prometheus exporter for host network metrics",
 		Version: exporter.VersionString(),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), listenAddr, procPath, sysPath, logLevel, maxArpEntries, maxGraphEdges, maxTCPConns, tcpConnStates, nil)
+			return run(cmd.Context(), listenAddr, procPath, sysPath, logLevel, maxArpEntries, maxGraphEdges, maxTCPConns, tcpConnStates, hostNetNS, nil)
 		},
 	}
 
@@ -57,18 +58,19 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().IntVar(&maxGraphEdges, "max-graph-edges", netgraph.DefaultMaxEdges, "Maximum network graph edges to export (prevents cardinality explosion)")
 	cmd.Flags().IntVar(&maxTCPConns, "max-tcp-connections", tcpstate.DefaultMaxConnections, "Maximum TCP connections to export (prevents cardinality explosion)")
 	cmd.Flags().StringVar(&tcpConnStates, "tcp-connection-states", "", "Comma-separated list of TCP states to report (default: all states)")
+	cmd.Flags().StringVar(&hostNetNS, "host-netns", "", "Path to the host network namespace (e.g. /host/proc/1/ns/net) for reading nftables from inside a non-host-network container")
 
 	return cmd
 }
 
-func run(ctx context.Context, listenAddr, procPath, sysPath, logLevel string, maxArpEntries, maxGraphEdges, maxTCPConns int, tcpConnStates string, reg *prometheus.Registry) error {
+func run(ctx context.Context, listenAddr, procPath, sysPath, logLevel string, maxArpEntries, maxGraphEdges, maxTCPConns int, tcpConnStates, hostNetNS string, reg *prometheus.Registry) error {
 	exporter.SetupLogging(logLevel)
 
 	if reg == nil {
 		reg = prometheus.NewRegistry()
 	}
 
-	for _, c := range createNetworkCollectors(procPath, sysPath, maxArpEntries, maxGraphEdges, maxTCPConns, tcpConnStates) {
+	for _, c := range createNetworkCollectors(procPath, sysPath, maxArpEntries, maxGraphEdges, maxTCPConns, tcpConnStates, hostNetNS) {
 		if err := reg.Register(c); err != nil {
 			return fmt.Errorf("registering collector %s: %w", c.Name(), err)
 		}
@@ -78,7 +80,7 @@ func run(ctx context.Context, listenAddr, procPath, sysPath, logLevel string, ma
 	return exporter.Serve(ctx, listenAddr, "Network Exporter", reg)
 }
 
-func createNetworkCollectors(procPath, sysPath string, maxArpEntries, maxGraphEdges, maxTCPConns int, tcpConnStates string) []collector.Collector {
+func createNetworkCollectors(procPath, sysPath string, maxArpEntries, maxGraphEdges, maxTCPConns int, tcpConnStates, hostNetNS string) []collector.Collector {
 	var states []string
 	if tcpConnStates != "" {
 		for _, s := range strings.Split(tcpConnStates, ",") {
@@ -93,7 +95,7 @@ func createNetworkCollectors(procPath, sysPath string, maxArpEntries, maxGraphEd
 		iface.New(sysPath),
 		netgraph.NewWithMax(procPath, maxGraphEdges),
 		conntrack.New(procPath),
-		firewall.New(),
+		firewall.NewWithNetNS(hostNetNS),
 		tcpstate.NewWithMax(procPath, maxTCPConns, states),
 	}
 }

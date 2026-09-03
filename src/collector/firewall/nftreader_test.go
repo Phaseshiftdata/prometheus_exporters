@@ -3,6 +3,7 @@ package firewall
 import (
 	"encoding/binary"
 	"errors"
+	"os"
 	"strings"
 	"syscall"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
 	"github.com/mdlayher/netlink"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sys/unix"
 )
 
@@ -450,9 +452,9 @@ func TestProbeWrappedErrorsStillClassify(t *testing.T) {
 func TestDialNftablesWrapsConstructorFailure(t *testing.T) {
 	orig := nftNewConnFn
 	defer func() { nftNewConnFn = orig }()
-	nftNewConnFn = func() (*nftables.Conn, error) { return nil, syscall.EPROTONOSUPPORT }
+	nftNewConnFn = func(_ int) (*nftables.Conn, error) { return nil, syscall.EPROTONOSUPPORT }
 
-	_, err := dialNftables()
+	_, err := dialNftables(-1)
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -461,6 +463,157 @@ func TestDialNftablesWrapsConstructorFailure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "NETLINK_NETFILTER") {
 		t.Errorf("error %q does not say which socket failed", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Network namespace support
+// ---------------------------------------------------------------------------
+
+func TestNewNetlinkReaderForNetNSOpensFile(t *testing.T) {
+	// Create a temp file to stand in for /proc/1/ns/net.
+	f, err := os.CreateTemp(t.TempDir(), "fake-netns")
+	if err != nil {
+		t.Fatalf("creating temp file: %v", err)
+	}
+	f.Close()
+
+	origOpen := openNetNSFn
+	defer func() { openNetNSFn = origOpen }()
+
+	var openedPath string
+	openNetNSFn = func(path string) (*os.File, error) {
+		openedPath = path
+		return os.Open(path) //nolint:gosec
+	}
+
+	// Also stub nftNewConnFn so we don't need a real netlink socket.
+	origConn := nftNewConnFn
+	defer func() { nftNewConnFn = origConn }()
+	nftNewConnFn = func(netnsFd int) (*nftables.Conn, error) {
+		if netnsFd < 0 {
+			t.Error("expected a non-negative fd for namespace dial")
+		}
+		return nftables.New(
+			nftables.AsLasting(),
+			nftables.WithTestDial(func(reqs []netlink.Message) ([]netlink.Message, error) {
+				return dumpReply(reqs[0], nil), nil
+			}),
+		)
+	}
+
+	r, err := newNetlinkReaderForNetNS(f.Name())
+	if err != nil {
+		t.Fatalf("newNetlinkReaderForNetNS: %v", err)
+	}
+	defer r.Close()
+
+	if openedPath != f.Name() {
+		t.Errorf("opened %q, want %q", openedPath, f.Name())
+	}
+	if r.netnsFile == nil {
+		t.Error("expected netnsFile to be set")
+	}
+}
+
+func TestNewNetlinkReaderForNetNSInvalidPath(t *testing.T) {
+	_, err := newNetlinkReaderForNetNS("/nonexistent/ns/net")
+	if err == nil {
+		t.Fatal("expected an error for a nonexistent path")
+	}
+	if !strings.Contains(err.Error(), "opening host network namespace") {
+		t.Errorf("error %q does not mention the namespace", err)
+	}
+}
+
+func TestNetlinkReaderCloseWithoutNetNS(t *testing.T) {
+	r := newNetlinkReader()
+	if err := r.Close(); err != nil {
+		t.Errorf("Close on reader without netns file: %v", err)
+	}
+}
+
+func TestNewWithNetNSEmptyPathUsesCurrentNamespace(t *testing.T) {
+	origFn := probeReaderFn
+	defer func() { probeReaderFn = origFn }()
+
+	var receivedPath string
+	probeReaderFn = func(netnsPath string) (NftablesReader, string) {
+		receivedPath = netnsPath
+		return &mockReader{}, ""
+	}
+
+	c := NewWithNetNS("")
+	if c == nil {
+		t.Fatal("NewWithNetNS returned nil")
+	}
+	if receivedPath != "" {
+		t.Errorf("expected empty path, got %q", receivedPath)
+	}
+}
+
+func TestNewWithNetNSPassesPathToProbe(t *testing.T) {
+	origFn := probeReaderFn
+	defer func() { probeReaderFn = origFn }()
+
+	var receivedPath string
+	probeReaderFn = func(netnsPath string) (NftablesReader, string) {
+		receivedPath = netnsPath
+		return &mockReader{}, ""
+	}
+
+	c := NewWithNetNS("/proc/1/ns/net")
+	if c == nil {
+		t.Fatal("NewWithNetNS returned nil")
+	}
+	if receivedPath != "/proc/1/ns/net" {
+		t.Errorf("expected /proc/1/ns/net, got %q", receivedPath)
+	}
+}
+
+func TestNewWithNetNSInvalidPathReportsDown(t *testing.T) {
+	// Use the real probeReaderFn -- it will fail to open the path.
+	c := NewWithNetNS("/nonexistent/ns/net")
+	if c == nil {
+		t.Fatal("NewWithNetNS returned nil")
+	}
+	if c.Name() != "firewall" {
+		t.Errorf("expected name 'firewall', got %q", c.Name())
+	}
+	// The collector must report down, not panic.
+	ch := make(chan prometheus.Metric, 10)
+	c.Collect(ch)
+	close(ch)
+	var found bool
+	for m := range ch {
+		desc := m.Desc().String()
+		if strings.Contains(desc, "network_firewall_collector_up") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected network_firewall_collector_up metric")
+	}
+}
+
+func TestDialNftablesPassesFd(t *testing.T) {
+	orig := nftNewConnFn
+	defer func() { nftNewConnFn = orig }()
+
+	var receivedFd int
+	nftNewConnFn = func(netnsFd int) (*nftables.Conn, error) {
+		receivedFd = netnsFd
+		return nil, syscall.EPROTONOSUPPORT // Don't need a real conn for this test.
+	}
+
+	_, _ = dialNftables(42)
+	if receivedFd != 42 {
+		t.Errorf("expected fd 42, got %d", receivedFd)
+	}
+
+	_, _ = dialNftables(-1)
+	if receivedFd != -1 {
+		t.Errorf("expected fd -1, got %d", receivedFd)
 	}
 }
 
@@ -629,7 +782,7 @@ func newNetlinkReaderWithDial(t *testing.T, respond func(req netlink.Message) []
 	t.Helper()
 	orig := nftNewConnFn
 	t.Cleanup(func() { nftNewConnFn = orig })
-	nftNewConnFn = func() (*nftables.Conn, error) {
+	nftNewConnFn = func(_ int) (*nftables.Conn, error) {
 		return nftables.New(
 			nftables.AsLasting(),
 			nftables.WithTestDial(func(reqs []netlink.Message) ([]netlink.Message, error) {

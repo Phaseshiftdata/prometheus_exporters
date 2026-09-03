@@ -74,7 +74,19 @@ var _ collector.Collector = (*firewallCollector)(nil)
 // probeReaderFn builds the production reader and classifies whether this
 // process can ever read nftables. It is a function variable so tests can
 // stand in for the kernel without a netlink socket.
-var probeReaderFn = func() (NftablesReader, string) {
+//
+// The netnsPath parameter, when non-empty, causes the reader to open a
+// netlink socket in the specified network namespace (e.g. "/proc/1/ns/net")
+// instead of the current one. This is the mechanism that lets a container
+// with userns-remap read the host's nftables ruleset.
+var probeReaderFn = func(netnsPath string) (NftablesReader, string) {
+	if netnsPath != "" {
+		r, err := newNetlinkReaderForNetNS(netnsPath)
+		if err != nil {
+			return nil, err.Error()
+		}
+		return r, r.probe()
+	}
 	r := newNetlinkReader()
 	return r, r.probe()
 }
@@ -97,7 +109,17 @@ var probeReaderFn = func() (NftablesReader, string) {
 // collector that gave up on the first of them would stay dark long after the
 // cause was gone.
 func New() collector.Collector {
-	reader, unavailable := probeReaderFn()
+	return NewWithNetNS("")
+}
+
+// NewWithNetNS returns a firewall collector that reads nftables from the
+// specified network namespace. When netnsPath is empty, the collector reads
+// from the current namespace (identical to New). When set to a path like
+// "/proc/1/ns/net", the collector opens that namespace file and passes its
+// fd to nftables.WithNetNSFd on every dial, allowing a container with
+// userns-remap to read the host's nftables ruleset.
+func NewWithNetNS(netnsPath string) collector.Collector {
+	reader, unavailable := probeReaderFn(netnsPath)
 	if unavailable != "" {
 		slog.Warn("firewall metrics disabled: nftables cannot be read over netlink",
 			"collector", "firewall", "reason", unavailable)

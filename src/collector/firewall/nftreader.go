@@ -3,6 +3,7 @@ package firewall
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"syscall"
 
@@ -55,6 +56,13 @@ type netlinkReader struct {
 	// dial opens a connection. A field rather than a direct call so tests can
 	// substitute a fake, and so probe and the two Get methods share one path.
 	dial func() (nftConn, error)
+
+	// netnsFile, when non-nil, is the open file descriptor for the target
+	// network namespace (e.g. /proc/1/ns/net). It stays open for the lifetime
+	// of the reader so that every dial can pass its fd to
+	// nftables.WithNetNSFd. The caller that provided the path is responsible
+	// for calling Close.
+	netnsFile *os.File
 }
 
 // Compile-time interface checks.
@@ -63,7 +71,9 @@ var (
 	_ nftConn        = (*nftables.Conn)(nil)
 )
 
-// dialNftables opens a lasting NETLINK_NETFILTER socket.
+// dialNftables opens a lasting NETLINK_NETFILTER socket, optionally in the
+// network namespace identified by netnsFd. When netnsFd is -1, the socket
+// opens in the current namespace (existing behavior).
 //
 // Lasting, rather than the library's default of one transient socket per
 // operation, because a scrape walks every chain in the ruleset and asks for
@@ -72,8 +82,8 @@ var (
 // running firewalld that is dozens of round trips, and dozens of socket
 // open/close pairs every 30 seconds is a cost with nothing to show for it.
 // The caller closes it; see the deferred CloseLasting in each reader.
-func dialNftables() (nftConn, error) {
-	conn, err := nftNewConnFn()
+func dialNftables(netnsFd int) (nftConn, error) {
+	conn, err := nftNewConnFn(netnsFd)
 	if err != nil {
 		return nil, fmt.Errorf("opening NETLINK_NETFILTER socket: %w", err)
 	}
@@ -84,13 +94,56 @@ func dialNftables() (nftConn, error) {
 // is a function variable for the same reason arp.go's neighListFn is: it is
 // the seam tests use to feed captured kernel netlink payloads through the
 // entire production decode path without needing a kernel.
-var nftNewConnFn = func() (*nftables.Conn, error) {
-	return nftables.New(nftables.AsLasting())
+//
+// The netnsFd parameter, when >= 0, causes the connection to open in the
+// given network namespace (via nftables.WithNetNSFd). Pass -1 to use the
+// current namespace.
+var nftNewConnFn = func(netnsFd int) (*nftables.Conn, error) {
+	opts := []nftables.ConnOption{nftables.AsLasting()}
+	if netnsFd >= 0 {
+		opts = append(opts, nftables.WithNetNSFd(netnsFd))
+	}
+	return nftables.New(opts...)
 }
 
-// newNetlinkReader returns the production reader.
+// newNetlinkReader returns the production reader for the current network
+// namespace.
 func newNetlinkReader() *netlinkReader {
-	return &netlinkReader{dial: dialNftables}
+	return &netlinkReader{dial: func() (nftConn, error) {
+		return dialNftables(-1)
+	}}
+}
+
+// newNetlinkReaderForNetNS returns a production reader that reads nftables
+// from the network namespace at netnsPath (e.g. "/proc/1/ns/net"). The
+// returned reader holds the namespace file descriptor open; call Close to
+// release it.
+func newNetlinkReaderForNetNS(netnsPath string) (*netlinkReader, error) {
+	f, err := openNetNSFn(netnsPath)
+	if err != nil {
+		return nil, fmt.Errorf("opening host network namespace %s: %w", netnsPath, err)
+	}
+	fd := int(f.Fd())
+	return &netlinkReader{
+		dial: func() (nftConn, error) {
+			return dialNftables(fd)
+		},
+		netnsFile: f,
+	}, nil
+}
+
+// openNetNSFn opens the network namespace file. It is a function variable so
+// tests can intercept it without needing a real namespace file.
+var openNetNSFn = func(path string) (*os.File, error) {
+	return os.Open(path) //nolint:gosec // Path is operator-supplied via CLI flag.
+}
+
+// Close releases the network namespace file descriptor, if one is held.
+func (r *netlinkReader) Close() error {
+	if r.netnsFile != nil {
+		return r.netnsFile.Close()
+	}
+	return nil
 }
 
 // probe reports why this process can never read nftables, or "" if it looks

@@ -123,6 +123,7 @@ variables are required.
 | `--max-graph-edges` | `10000` | Maximum number of network graph edges to export per scrape. Prevents metric cardinality explosion under high connection volume. When exceeded, output is truncated and `network_graph_edges_truncated` is set to 1. |
 | `--max-tcp-connections` | `10000` | Maximum number of per-connection TCP state metrics to export per scrape. Prevents metric cardinality explosion on busy hosts. When exceeded, output is truncated and `network_tcp_connections_truncated` is set to 1. |
 | `--tcp-connection-states` | *(all states)* | Comma-separated list of TCP states to report (e.g. `ESTABLISHED,LISTEN,TIME_WAIT`). When empty, all states are reported. |
+| `--host-netns` | *(empty)* | Path to the host network namespace file (e.g. `/host/proc/1/ns/net`). When set, the firewall collector opens a netlink socket in the specified namespace instead of the container's own, allowing it to read the host's nftables ruleset from a non-host-network container. Requires `--pid=host` or a bind mount of the host's `/proc` so that `/proc/1/ns/net` is reachable. |
 
 ## Collectors
 
@@ -439,6 +440,42 @@ services:
       - --listen-address=0.0.0.0:9100
     restart: unless-stopped
 ```
+
+### Docker Compose with userns-remap
+
+On hosts with Docker `userns-remap: "default"` (CIS hardening),
+`network_mode: host` is blocked. The firewall collector would normally see
+only the container's empty nftables ruleset. The `--host-netns` flag
+solves this by opening a netlink socket in the host's network namespace
+via `/proc/1/ns/net`.
+
+```yaml
+services:
+  network_exporter:
+    image: ghcr.io/phaseshiftdata/network_exporter:main
+    pid: host                      # Required for /proc/1/ns/net access
+    user: "0:0"
+    cap_add:
+      - NET_ADMIN
+      - DAC_READ_SEARCH
+    security_opt:
+      - label=disable
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    command:
+      - --proc-path=/host/proc
+      - --sys-path=/host/sys
+      - --host-netns=/host/proc/1/ns/net
+      - --listen-address=0.0.0.0:9100
+    restart: unless-stopped
+```
+
+**Note:** Without `network_mode: host`, the ARP and conntrack collectors
+still read from the container's network namespace and will report only
+container-local data. The `--host-netns` flag only affects the firewall
+collector. If full network visibility is required and `userns-remap`
+permits it, prefer `network_mode: host`.
 
 ## Failure Modes
 
