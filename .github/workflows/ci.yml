@@ -324,7 +324,7 @@ jobs:
           cd site
           OUTPUT=$(npx vitest run --coverage 2>&1)
           echo "$OUTPUT" | tail -20
-          COVERAGE=$(echo "$OUTPUT" | sed 's/\x1b\[[0-9;]*m//g' | grep -E "Statements\s+:" | awk -F'%' '{print $1}' | awk '{print $NF}')
+          COVERAGE=$(echo "$OUTPUT" | sed 's/\x1b\[[0-9;]*m//g' | grep "All files" | awk -F'|' '{gsub(/ /, "", $2); print $2}')
           if [ -z "$COVERAGE" ]; then
             echo "::error::Could not determine TypeScript coverage"
             exit 1
