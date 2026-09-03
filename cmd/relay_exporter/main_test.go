@@ -65,9 +65,9 @@ func TestSourceIPDenied(t *testing.T) {
 	}
 }
 
-// --- RFC 1918 validation ---
+// --- Allowed target validation ---
 
-func TestRFC1918Valid(t *testing.T) {
+func TestAllowedTargetValid(t *testing.T) {
 	valid := []string{
 		"10.0.0.1",
 		"10.255.255.255",
@@ -75,21 +75,23 @@ func TestRFC1918Valid(t *testing.T) {
 		"172.31.255.255",
 		"192.168.0.1",
 		"192.168.255.255",
+		"127.0.0.1",   // loopback
+		"127.0.0.2",   // loopback
+		"127.255.255.254", // loopback upper bound
 	}
 	for _, ip := range valid {
 		parsed := net.ParseIP(ip)
-		if !isRFC1918(parsed) {
-			t.Errorf("%s should be RFC 1918", ip)
+		if !isAllowedTarget(parsed) {
+			t.Errorf("%s should be an allowed target", ip)
 		}
 	}
 }
 
-func TestRFC1918Invalid(t *testing.T) {
+func TestAllowedTargetInvalid(t *testing.T) {
 	invalid := []string{
 		"203.0.113.1",   // RFC 5737 TEST-NET-3
 		"203.0.113.50",  // RFC 5737
 		"8.8.8.8",       // public
-		"127.0.0.1",     // loopback
 		"169.254.1.1",   // link-local
 		"172.32.0.1",    // just outside 172.16/12
 		"11.0.0.1",      // just outside 10/8
@@ -97,16 +99,16 @@ func TestRFC1918Invalid(t *testing.T) {
 	}
 	for _, ip := range invalid {
 		parsed := net.ParseIP(ip)
-		if isRFC1918(parsed) {
-			t.Errorf("%s should NOT be RFC 1918", ip)
+		if isAllowedTarget(parsed) {
+			t.Errorf("%s should NOT be an allowed target", ip)
 		}
 	}
 }
 
-func TestRFC1918IPv6(t *testing.T) {
+func TestAllowedTargetIPv6(t *testing.T) {
 	parsed := net.ParseIP("::1")
-	if isRFC1918(parsed) {
-		t.Error("IPv6 loopback should not be RFC 1918")
+	if isAllowedTarget(parsed) {
+		t.Error("IPv6 loopback should not be an allowed target")
 	}
 }
 

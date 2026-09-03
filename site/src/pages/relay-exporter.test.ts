@@ -29,12 +29,13 @@ describe("RelayExporterPage", () => {
     expect(html).toContain("# TYPE relay_response gauge");
   });
 
-  it("contains RFC 1918 documentation", () => {
+  it("contains target IP validation documentation", () => {
     const html = RelayExporterPage();
     expect(html).toContain("RFC 1918");
     expect(html).toContain("10.0.0.0/8");
     expect(html).toContain("172.16.0.0/12");
     expect(html).toContain("192.168.0.0/16");
+    expect(html).toContain("127.0.0.0/8");
   });
 
   it("contains source IP filtering documentation", () => {

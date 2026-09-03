@@ -12,7 +12,7 @@ infrastructure, IPsec tunnels, Cloudflare services, and more.
 - **network_exporter** - Network connectivity and performance metrics
 - **ipsec_exporter** - IPsec tunnel status and traffic metrics
 - **libvirt_exporter** - Libvirt hypervisor and virtual machine metrics
-- **relay_exporter** - Prometheus metrics relay proxy for RFC 1918 targets
+- **relay_exporter** - Prometheus metrics relay proxy for private and loopback targets
 - **openbao_exporter** - OpenBao/Vault cluster health, seal status, and native metrics
 
 ## Documentation

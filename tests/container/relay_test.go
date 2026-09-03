@@ -62,7 +62,7 @@ func TestRelayExporter(t *testing.T) {
 		}
 	})
 
-	t.Run("metrics_proxy_rfc1918_unreachable", func(t *testing.T) {
+	t.Run("metrics_proxy_private_unreachable", func(t *testing.T) {
 		// Target 10.0.0.1:9100 is unreachable, but the relay should still
 		// return 200 with relay_target_response=0.
 		status, body := httpGet(t, base+"/metrics?ip=10.0.0.1&port=9100")
@@ -77,11 +77,11 @@ func TestRelayExporter(t *testing.T) {
 		}
 	})
 
-	t.Run("metrics_reject_non_rfc1918", func(t *testing.T) {
+	t.Run("metrics_reject_non_private", func(t *testing.T) {
 		// RFC 5737 documentation address -- must be rejected.
 		status, _ := httpGetStatus(t, base+"/metrics?ip=203.0.113.1&port=9100")
 		if status != http.StatusBadRequest {
-			t.Errorf("expected 400 for non-RFC1918 IP, got %d", status)
+			t.Errorf("expected 400 for public IP, got %d", status)
 		}
 	})
 
@@ -116,7 +116,7 @@ func TestRelayExporter(t *testing.T) {
 	})
 
 	t.Run("metrics_reject_public_ip", func(t *testing.T) {
-		// Public IP 8.8.8.8 must be rejected as non-RFC 1918.
+		// Public IP 8.8.8.8 must be rejected as non-private.
 		status, _ := httpGetStatus(t, base+"/metrics?ip=8.8.8.8&port=9100")
 		if status != http.StatusBadRequest {
 			t.Errorf("expected 400 for public IP 8.8.8.8, got %d", status)
