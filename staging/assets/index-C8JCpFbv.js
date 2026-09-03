@@ -13,7 +13,7 @@
       <h2>Exporters</h2>
       <table>
         <thead><tr><th>Exporter</th><th>Description</th><th>Default Port</th></tr></thead>
-        <tbody>${[[`network_exporter`,`Network connectivity and performance metrics`,`9101`],[`ipsec_exporter`,`IPsec tunnel status and traffic metrics`,`9102`],[`cloudflare_exporter`,`Cloudflare analytics, Zero Trust, DNS, and certificate metrics`,`9199`],[`libvirt_exporter`,`Libvirt/KVM virtual machine and hypervisor metrics`,`9177`],[`openbao_exporter`,`OpenBao cluster health, raft, and native metrics`,`9100`],[`relay_exporter`,`Prometheus metrics relay proxy for RFC 1918 targets`,`9100`]].map(([e,t,n])=>`<tr><td><strong>${e}</strong></td><td>${t}</td><td>${n}</td></tr>`).join(``)}</tbody>
+        <tbody>${[[`network_exporter`,`Network connectivity and performance metrics`,`9101`],[`ipsec_exporter`,`IPsec tunnel status and traffic metrics`,`9102`],[`cloudflare_exporter`,`Cloudflare analytics, Zero Trust, DNS, and certificate metrics`,`9199`],[`libvirt_exporter`,`Libvirt/KVM virtual machine and hypervisor metrics`,`9177`],[`openbao_exporter`,`OpenBao cluster health, raft, and native metrics`,`9100`],[`relay_exporter`,`Prometheus metrics relay proxy for private and loopback targets`,`9100`]].map(([e,t,n])=>`<tr><td><strong>${e}</strong></td><td>${t}</td><td>${n}</td></tr>`).join(``)}</tbody>
       </table>
     </div>
     <div class="section">
@@ -1749,7 +1749,7 @@ spec:
       <h2>Relay Exporter</h2>
       <p>
         <code>relay_exporter</code> is a Prometheus metrics relay proxy for
-        RFC 1918 targets behind VPN tunnels or private networks. Prometheus
+        private and loopback targets behind VPN tunnels or private networks. Prometheus
         scrapes the relay, which fetches <code>/metrics</code> from targets
         that Prometheus cannot directly reach. The relay validates every
         request, enforces source IP filtering, and restricts targets to
@@ -1771,7 +1771,7 @@ spec:
         relay fetches <code>/metrics</code> from the target and returns
         the response with relay status metrics appended.
       </p>
-      <pre><code>Prometheus --&gt; relay_exporter --&gt; target (RFC 1918 host)
+      <pre><code>Prometheus --&gt; relay_exporter --&gt; target (private/loopback host)
                (network A)         (network B)</code></pre>
       <h3>Request Flow</h3>
       <ol>
@@ -1814,12 +1814,13 @@ docker run -d --rm \\
         <code>relay_exporter</code> refuses to start with a clear error message
         if it is omitted.
       </p>
-      <h3>RFC 1918 Target Validation (HTTP 400)</h3>
-      <p>The target <code>ip</code> must be a valid RFC 1918 private address:</p>
+      <h3>Target IP Validation (HTTP 400)</h3>
+      <p>The target <code>ip</code> must be a private (RFC 1918) or loopback address:</p>
       <ul>
         <li><code>10.0.0.0/8</code></li>
         <li><code>172.16.0.0/12</code></li>
         <li><code>192.168.0.0/16</code></li>
+        <li><code>127.0.0.0/8</code> (loopback)</li>
       </ul>
       <p>
         The <code>port</code> parameter is required and must be 1&ndash;65535
@@ -2029,12 +2030,12 @@ spec:
             <td>Only the IP specified by <code>--allowed-source</code> may send requests. All other sources receive HTTP 403.</td>
           </tr>
           <tr>
-            <td><strong>RFC 1918 restriction</strong></td>
-            <td>The relay only proxies requests to private IP addresses (<code>10.0.0.0/8</code>, <code>172.16.0.0/12</code>, <code>192.168.0.0/16</code>). Public IP addresses are rejected with HTTP 400.</td>
+            <td><strong>Private and loopback restriction</strong></td>
+            <td>The relay only proxies requests to private IP addresses (<code>10.0.0.0/8</code>, <code>172.16.0.0/12</code>, <code>192.168.0.0/16</code>) and loopback addresses (<code>127.0.0.0/8</code>). Public IP addresses are rejected with HTTP 400.</td>
           </tr>
           <tr>
             <td><strong>No open proxy</strong></td>
-            <td>The combination of source IP filtering, RFC 1918 target restriction, and fixed <code>/metrics</code> path prevents the relay from being used as an open proxy.</td>
+            <td>The combination of source IP filtering, private and loopback target restriction, and fixed target paths prevents the relay from being used as an open proxy.</td>
           </tr>
           <tr>
             <td><strong>Authorization forwarding</strong></td>
