@@ -26,11 +26,11 @@ func TestLibvirtExporter(t *testing.T) {
 		"--libvirt-uri=test:///default",
 	)
 
-	baseURL := "http://127.0.0.1:" + hostPort
-	waitForHealthy(t, baseURL+"/", 15*time.Second)
+	base := baseURL(t, hostPort)
+	waitForHealthy(t, base+"/", 15*time.Second)
 
 	t.Run("metrics_returns_200", func(t *testing.T) {
-		status, body := httpGet(t, baseURL+"/metrics")
+		status, body := httpGet(t, base+"/metrics")
 		if status != 200 {
 			t.Fatalf("expected 200 from /metrics, got %d", status)
 		}
@@ -42,7 +42,7 @@ func TestLibvirtExporter(t *testing.T) {
 	})
 
 	t.Run("landing_page", func(t *testing.T) {
-		status, body := httpGet(t, baseURL+"/")
+		status, body := httpGet(t, base+"/")
 		if status != 200 {
 			t.Fatalf("expected 200 from /, got %d", status)
 		}
@@ -52,7 +52,7 @@ func TestLibvirtExporter(t *testing.T) {
 	})
 
 	t.Run("metrics_content_type", func(t *testing.T) {
-		contentType := httpGetContentType(t, baseURL+"/metrics")
+		contentType := httpGetContentType(t, base+"/metrics")
 		if !strings.HasPrefix(contentType, "text/plain") {
 			t.Errorf("expected text/plain Content-Type from /metrics, got %q", contentType)
 		}
@@ -102,4 +102,93 @@ func TestLibvirtExporterInvalidFlag(t *testing.T) {
 	skipIfNoDocker(t)
 	image := buildImage(t, libvirtDockerfile, libvirtImageTag)
 	testInvalidFlag(t, image)
+}
+
+// TestLibvirtExporterLibvirtUp verifies the libvirt_up metric is present and
+// equals 0 when libvirtd is unavailable inside the distroless container.
+func TestLibvirtExporterLibvirtUp(t *testing.T) {
+	skipIfNoDocker(t)
+
+	image := buildImage(t, libvirtDockerfile, libvirtImageTag)
+	hostPort := freePort(t)
+
+	containerID := runContainer(t, image, hostPort, libvirtPort,
+		"--listen-address=0.0.0.0:"+libvirtPort,
+	)
+
+	base := baseURL(t, hostPort)
+	waitForHealthy(t, base+"/", 15*time.Second)
+
+	status, body := httpGet(t, base+"/metrics")
+	if status != 200 {
+		t.Fatalf("expected 200 from /metrics, got %d", status)
+	}
+
+	if !strings.Contains(body, "libvirt_up") {
+		t.Fatal("/metrics does not contain libvirt_up metric")
+	}
+
+	if !strings.Contains(body, "libvirt_up 0") {
+		t.Error("expected libvirt_up 0 when libvirtd is unavailable")
+	}
+
+	logs := containerLogs(t, containerID)
+	if strings.Contains(logs, "panic") {
+		t.Errorf("container panicked:\n%s", logs)
+	}
+}
+
+func TestLibvirtExporterRemoteURIRejected(t *testing.T) {
+	skipIfNoDocker(t)
+
+	image := buildImage(t, libvirtDockerfile, libvirtImageTag)
+
+	out, err := runContainerForeground(t, image,
+		image,
+		"--listen-address=0.0.0.0:"+libvirtPort,
+		"--libvirt-uri=qemu+ssh://host/system",
+	)
+	if err == nil {
+		t.Errorf("expected container to fail with remote URI, but it succeeded: %s", out)
+	}
+	if !strings.Contains(out, "remote transport") {
+		t.Errorf("error output should mention remote transport, got: %s", out)
+	}
+}
+
+func TestLibvirtExporterGracefulNoLibvirtd(t *testing.T) {
+	skipIfNoDocker(t)
+
+	image := buildImage(t, libvirtDockerfile, libvirtImageTag)
+	hostPort := freePort(t)
+
+	containerID := runContainer(t, image, hostPort, libvirtPort,
+		"--listen-address=0.0.0.0:"+libvirtPort,
+	)
+
+	base := baseURL(t, hostPort)
+	waitForHealthy(t, base+"/", 15*time.Second)
+
+	status, body := httpGet(t, base+"/")
+	if status != 200 {
+		t.Fatalf("expected 200 from /, got %d", status)
+	}
+	if !strings.Contains(body, "Libvirt Exporter") {
+		t.Error("landing page does not contain 'Libvirt Exporter'")
+	}
+
+	status, body = httpGet(t, base+"/metrics")
+	if status != 200 {
+		t.Fatalf("expected 200 from /metrics, got %d", status)
+	}
+	if !strings.Contains(body, "libvirt_up 0") {
+		t.Error("expected libvirt_up 0 when libvirtd is not running")
+	}
+
+	logs := containerLogs(t, containerID)
+	if strings.Contains(logs, "panic") {
+		t.Errorf("container panicked:\n%s", logs)
+	}
+
+	testCleanShutdown(t, containerID)
 }
