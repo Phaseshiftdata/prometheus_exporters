@@ -581,12 +581,13 @@ test.describe("post-deployment verification", () => {
     await expect(page.locator(".main")).toContainText("# TYPE relay_response gauge");
   });
 
-  test("relay exporter page has RFC 1918 documentation", async ({ page }) => {
+  test("relay exporter page has target IP validation documentation", async ({ page }) => {
     await page.goto("./#/relay-exporter");
     await expect(page.locator(".main")).toContainText("RFC 1918");
     await expect(page.locator(".main")).toContainText("10.0.0.0/8");
     await expect(page.locator(".main")).toContainText("172.16.0.0/12");
     await expect(page.locator(".main")).toContainText("192.168.0.0/16");
+    await expect(page.locator(".main")).toContainText("127.0.0.0/8");
   });
 
   test("relay exporter page has source IP filtering documentation", async ({ page }) => {

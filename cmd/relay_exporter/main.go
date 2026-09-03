@@ -1,8 +1,8 @@
 // relay_exporter is a Prometheus metrics relay proxy.
 //
 // It accepts scrape requests at /metrics?ip=<target>&port=<num>&tls=<bool>,
-// fetches /metrics from the RFC 1918 target, and returns the response with
-// relay status metrics appended.
+// fetches /metrics from the private or loopback target, and returns the
+// response with relay status metrics appended.
 package main
 
 import (
@@ -50,7 +50,7 @@ func rootCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:     "relay_exporter",
-		Short:   "Prometheus metrics relay proxy for RFC 1918 targets",
+		Short:   "Prometheus metrics relay proxy for private and loopback targets",
 		Version: exporter.VersionString(),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if allowedSource == "" {
@@ -176,19 +176,21 @@ func buildTargetTLSConfig(caCert string, skipVerify bool) (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
-// rfc1918Nets are the private address ranges defined in RFC 1918.
-var rfc1918Nets = []net.IPNet{
+// allowedTargetNets are the address ranges accepted as proxy targets:
+// RFC 1918 private networks and the loopback range (RFC 1122).
+var allowedTargetNets = []net.IPNet{
 	{IP: net.IPv4(10, 0, 0, 0), Mask: net.CIDRMask(8, 32)},
 	{IP: net.IPv4(172, 16, 0, 0), Mask: net.CIDRMask(12, 32)},
 	{IP: net.IPv4(192, 168, 0, 0), Mask: net.CIDRMask(16, 32)},
+	{IP: net.IPv4(127, 0, 0, 0), Mask: net.CIDRMask(8, 32)},
 }
 
-func isRFC1918(ip net.IP) bool {
+func isAllowedTarget(ip net.IP) bool {
 	ip = ip.To4()
 	if ip == nil {
 		return false
 	}
-	for _, n := range rfc1918Nets {
+	for _, n := range allowedTargetNets {
 		if n.Contains(ip) {
 			return true
 		}
@@ -205,9 +207,9 @@ func extractSourceIP(remoteAddr string) string {
 }
 
 // proxyHandler returns an HTTP handler that validates the request, proxies it
-// to targetPath on the specified RFC 1918 host, and appends relay status
-// metrics. The targetPath is a compile-time constant per endpoint -- it is never
-// derived from user input.
+// to targetPath on the specified private or loopback host, and appends relay
+// status metrics. The targetPath is a compile-time constant per endpoint -- it
+// is never derived from user input.
 func proxyHandler(allowedSource string, client *http.Client, sem chan struct{}, targetPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check source IP.
@@ -246,8 +248,8 @@ func proxyHandler(allowedSource string, client *http.Client, sem chan struct{}, 
 			http.Error(w, "invalid ip parameter", http.StatusBadRequest)
 			return
 		}
-		if !isRFC1918(ip) {
-			http.Error(w, "ip must be an RFC 1918 private address", http.StatusBadRequest)
+		if !isAllowedTarget(ip) {
+			http.Error(w, "ip must be a private (RFC 1918) or loopback (127.0.0.0/8) address", http.StatusBadRequest)
 			return
 		}
 
@@ -267,8 +269,8 @@ func proxyHandler(allowedSource string, client *http.Client, sem chan struct{}, 
 		}
 
 		// Build target URL. The IP is re-derived from the parsed
-		// and RFC 1918-validated net.IP (not the raw query string),
-		// and the path is a compile-time constant per endpoint.
+		// and validated net.IP (not the raw query string), and the
+		// path is a compile-time constant per endpoint.
 		scheme := "http"
 		if useTLS {
 			scheme = "https"
@@ -292,9 +294,9 @@ func proxyHandler(allowedSource string, client *http.Client, sem chan struct{}, 
 			req.Header.Set("Authorization", auth)
 		}
 
-		// Intentional proxy: target IP is validated as RFC 1918 only
-		// (isRFC1918), source IP is filtered (--allowed-source), and
-		// the target path is a compile-time constant per endpoint.
+		// Intentional proxy: target IP is validated as private/loopback
+		// (isAllowedTarget), source IP is filtered (--allowed-source),
+		// and the target path is a compile-time constant per endpoint.
 		resp, err := client.Do(req) // codeql[go/request-forgery]
 		duration := time.Since(start)
 

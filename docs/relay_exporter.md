@@ -3,11 +3,12 @@
 ## Overview
 
 `relay_exporter` is a Prometheus metrics relay proxy for targets on
-RFC 1918 private networks. Prometheus scrapes the relay, which fetches
-metrics from targets behind VPN tunnels or private networks that
-Prometheus cannot directly reach. The relay validates every request,
-enforces source IP filtering, and restricts targets to private address
-ranges so it cannot be used as an open proxy.
+private and loopback networks. Prometheus scrapes the relay, which
+fetches metrics from targets behind VPN tunnels or private networks
+that Prometheus cannot directly reach. The relay validates every
+request, enforces source IP filtering, and restricts targets to
+private and loopback address ranges so it cannot be used as an open
+proxy.
 
 Three proxy endpoints are available:
 
@@ -28,7 +29,7 @@ via gauge metrics appended to the response body.
 ## Architecture
 
 ```
-Prometheus --> relay_exporter --> target (RFC 1918 host)
+Prometheus --> relay_exporter --> target (private/loopback host)
                 (network A)         (network B)
 ```
 
@@ -89,10 +90,11 @@ error message if it is omitted.
 
 ### Query Parameter Validation (HTTP 400)
 
-- `ip` is **required** and must be a valid RFC 1918 address:
+- `ip` is **required** and must be a private (RFC 1918) or loopback address:
   - `10.0.0.0/8`
   - `172.16.0.0/12`
   - `192.168.0.0/16`
+  - `127.0.0.0/8` (loopback)
 - `port` is **required** and must be 1-65535 (port 0 is explicitly
   disallowed).
 - `tls` is **optional**, defaults to `false`, must be exactly `true`
@@ -366,13 +368,19 @@ prevents resource exhaustion when many targets are scraped simultaneously.
 
 - **Source IP filtering:** Only the IP specified by `--allowed-source`
   may send requests. All other sources receive HTTP 403.
-- **RFC 1918 restriction:** The relay only proxies requests to private
-  IP addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`).
-  Public IP addresses are rejected with HTTP 400.
-- **No open proxy:** The combination of source IP filtering, RFC 1918
-  target restriction, and fixed target paths (constants per endpoint)
-  prevents the relay from being used as an open proxy. There is no
-  user-controlled path parameter.
+- **Private and loopback restriction:** The relay only proxies requests
+  to private IP addresses (`10.0.0.0/8`, `172.16.0.0/12`,
+  `192.168.0.0/16`) and loopback addresses (`127.0.0.0/8`). Public IP
+  addresses are rejected with HTTP 400.
+- **Loopback security note:** Accepting `127.0.0.0/8` widens what the
+  authorized caller can reach to any localhost-bound service on the
+  relay host. Under host networking this includes every service bound
+  to loopback, not only the intended exporters. The `--allowed-source`
+  flag still restricts who may issue requests.
+- **No open proxy:** The combination of source IP filtering, private
+  and loopback target restriction, and fixed target paths (constants
+  per endpoint) prevents the relay from being used as an open proxy.
+  There is no user-controlled path parameter.
 - **Authorization forwarding:** The `Authorization` header is forwarded
   from Prometheus to the target, supporting bearer token authentication
   on targets.
