@@ -8,7 +8,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/mdlayher/netlink v1.11.2
 	github.com/prometheus/client_golang v1.24.1
-	github.com/prometheus/client_model v0.6.2
+	github.com/prometheus/client_model v0.6.3
 	github.com/prometheus/common v0.70.1
 	github.com/spf13/cobra v1.10.2
 	github.com/strongswan/govici v0.8.2
@@ -39,5 +39,5 @@ require (
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )
