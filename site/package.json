@@ -16,7 +16,7 @@
     "@asymmetric-effort/specifyjs": "^1.1.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.0",
+    "@playwright/test": "^1.63.0",
     "@vitest/coverage-istanbul": "^4.1.11",
     "jsdom": "^30.0.1",
     "nyc": "^18.0.0",
