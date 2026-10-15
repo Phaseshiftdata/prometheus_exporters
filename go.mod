@@ -1,20 +1,20 @@
 module github.com/phaseshiftdata/prometheus_exporters
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
 	github.com/google/nftables v0.3.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/mdlayher/netlink v1.11.2
-	github.com/prometheus/client_golang v1.24.1
-	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.70.1
+	github.com/prometheus/client_golang v1.25.0
+	github.com/prometheus/client_model v0.6.3
+	github.com/prometheus/common v0.72.0
 	github.com/spf13/cobra v1.10.2
 	github.com/strongswan/govici v0.8.2
 	github.com/vishvananda/netlink v1.3.1
 	go.uber.org/zap v1.28.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 	libvirt.org/go/libvirt v1.12006.0
 )
 
@@ -32,12 +32,12 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mdlayher/socket v0.6.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/prometheus/procfs v0.21.1 // indirect
+	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )
