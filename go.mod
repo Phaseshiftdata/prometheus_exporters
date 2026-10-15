@@ -1,6 +1,6 @@
 module github.com/phaseshiftdata/prometheus_exporters
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
@@ -14,7 +14,7 @@ require (
 	github.com/strongswan/govici v0.8.2
 	github.com/vishvananda/netlink v1.3.1
 	go.uber.org/zap v1.28.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.49.0
 	libvirt.org/go/libvirt v1.12006.0
 )
 
